@@ -1,0 +1,24 @@
+# C2C Dispersal Draft — Production Package
+
+This is a browser-only static web application. No Node.js, npm, React, command prompt, or software installation is required.
+
+## Files
+- `index.html` — website entry page
+- `styles.css` — layout and mobile styling
+- `app.js` — Firebase login, live draft, trades, queues, and commissioner controls
+- `firebase-config.js` — your Firebase web configuration
+- `data/nfl-players.csv` — 89 players from the two Sleeper rosters
+- `data/ncaa-players.csv` — 64 players from the uploaded Fantrax CSV
+- `firestore.rules` — security rules to paste into Firebase
+- `LAUNCH-STEPS.txt` — exact browser-only launch checklist
+
+## Important current limitation
+The NFL CSV contains the accurate Sleeper roster names, positions, and teams, but its previous-season fantasy-point column is blank. The NCAA fantasy totals are populated from the uploaded Fantrax CSV. Replace the blank NFL totals once Step 2 scoring calculations are complete.
+
+## Commissioner bootstrap
+The first person who registers is pending like everyone else. Use the Firebase console once to edit that user's document:
+- `approved`: true
+- `role`: commissioner
+- `teamName`: Peckin
+
+After that, the commissioner can approve and assign everyone else inside the website.
