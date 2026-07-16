@@ -7,7 +7,7 @@ import {
   getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs,
   serverTimestamp, query, orderBy, onSnapshot, runTransaction, addDoc
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=600";
+import { firebaseConfig } from "./firebase-config.js?v=610";
 
 const TEAM_ACCOUNTS = [
   { team:"YoByronWatkins", email:"byronwatkins@gmail.com", draftPosition:1 },
@@ -521,10 +521,11 @@ function updateDrawerBackdrop(){
     backdrop.id="drawerBackdrop";
     backdrop.className="drawer-backdrop";
     document.body.appendChild(backdrop);
-    backdrop.addEventListener("click",()=>{
-      closePlayerDrawer();
+    backdrop.addEventListener("click",event=>{
+      if(event.target!==backdrop)return;
       closeCommissionerDrawer();
-      $("tradeDrawer").classList.remove("open");
+      if($("tradeDrawer"))$("tradeDrawer").classList.remove("open");
+      updateDrawerBackdrop();
     });
   }
   const anyOpen=$("playerDrawer").classList.contains("open")||$("commissionerDrawer").classList.contains("open")||$("tradeDrawer").classList.contains("open");
@@ -652,6 +653,10 @@ function normalDraftAllowed(){
   return currentProfile&&liveDraftState?.initialized&&liveDraftState.status==="running"&&liveDraftState.currentPick<TOTAL_PICKS&&(currentProfile.role==="commissioner"||actingTeam()===currentPickOwner());
 }
 function updatePlayerDraftButton(){
+  const selectedPlayer=playerById(selectedPlayerId);
+  const isDraftedPlayer=selectedPlayer && draftedPlayerIds().has(selectedPlayer.id);
+  if($("playerActionArea"))$("playerActionArea").classList.toggle("hidden",Boolean(isDraftedPlayer));
+
   if(!$("draftPlayerButton"))return;
   const player=playerById(selectedPlayerId),drafted=player&&draftedPlayerIds().has(player.id);
   const editing=currentProfile?.role==="commissioner"&&commissionerDraftMode?.type==="edit";
@@ -963,19 +968,28 @@ document.querySelectorAll("[data-sort]").forEach(button=>{
 document.addEventListener("click",event=>{
   const playerOpen=$("playerDrawer").classList.contains("open");
   const commissionerOpen=$("commissionerDrawer").classList.contains("open");
-  const tradeOpen=$("tradeDrawer").classList.contains("open");
-  if(!playerOpen&&!commissionerOpen&&!tradeOpen)return;
+  const tradeOpen=$("tradeDrawer")?.classList.contains("open");
+  const queueOpen=$("queueDrawer")?.classList.contains("open");
 
-  const insidePlayer=$("playerDrawer").contains(event.target)||$("playerRail").contains(event.target);
-  const insideCommissioner=$("commissionerDrawer").contains(event.target)
-    ||$("commissionerRail").contains(event.target)
-    ||(!$("commissionerToggle").classList.contains("hidden")&&$("commissionerToggle").contains(event.target));
-  const insideTrade=$("tradeDrawer").contains(event.target)||$("tradeRail").contains(event.target)||$("tradeDetailModal").contains(event.target);
+  const clickedDraftBoard=event.target.closest(".draft-shell") || event.target.closest(".board-scroll");
+  const clickedPlayerUI=event.target.closest("#playerDrawer") || event.target.closest("#playerModal") || event.target.closest("#queueDrawer") || event.target.closest("#playerRail");
+  const clickedCommissionerUI=event.target.closest("#commissionerDrawer") || event.target.closest("#commissionerRail") || event.target.closest("#commissionerToggle");
+  const clickedTradeUI=event.target.closest("#tradeDrawer") || event.target.closest("#tradeRail") || event.target.closest("#tradeDetailModal");
 
-  const modalOpen=!$("playerModal").classList.contains("hidden");
-  if(playerOpen&&!modalOpen&&!insidePlayer)closePlayerDrawer();
-  if(commissionerOpen&&!insideCommissioner)closeCommissionerDrawer();
-  if(tradeOpen&&!insideTrade){$("tradeDrawer").classList.remove("open");updateDrawerBackdrop()}
+  if(playerOpen && clickedDraftBoard && !clickedPlayerUI){
+    closePlayerDrawer();
+  }
+  if(commissionerOpen && clickedDraftBoard && !clickedCommissionerUI){
+    closeCommissionerDrawer();
+  }
+  if(tradeOpen && clickedDraftBoard && !clickedTradeUI){
+    $("tradeDrawer").classList.remove("open");
+    updateDrawerBackdrop();
+  }
+  if(queueOpen && clickedDraftBoard && !clickedPlayerUI){
+    $("queueDrawer").classList.remove("open");
+    updateDrawerBackdrop();
+  }
 });
 
 
@@ -983,5 +997,12 @@ $("advancePick").textContent="Force Pick";$("previousPick").textContent="Undo La
 $("advancePick").onclick=forceBestAvailablePick;
 $("previousPick").onclick=undoLastPick;
 const editButton=document.createElement("button");editButton.id="editCompletedPick";editButton.className="btn";editButton.textContent="Edit Pick";editButton.onclick=editPick;$("resetDraftState").before(editButton);
+
+
+const hideDraftedCheckbox=$("hideDraftedPlayers");
+if(hideDraftedCheckbox){
+  const label=hideDraftedCheckbox.closest("label");
+  if(label)label.classList.add("hide-drafted-control");
+}
 
 onAuthStateChanged(auth,user=>user?loadCurrentUser(user):loadCurrentUser(null));

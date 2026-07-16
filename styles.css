@@ -184,3 +184,26 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(62,1
 .player-table tbody tr.drafted .player-name-cell span{color:var(--purple);font-weight:800}.drafted-label-detail{display:block;margin-top:3px;color:var(--muted);font-size:9px;font-weight:800}
 @media(max-width:800px){.drafted-info-grid{grid-template-columns:1fr}.player-modal-actions{grid-template-columns:1fr}.player-toolbar{gap:7px}.drafted-toggle{order:5}.commissioner-metrics{grid-template-columns:1fr 1fr}}
 @media(max-width:520px){.queue-row{grid-template-columns:30px 1fr}.queue-row-actions{grid-column:2;justify-content:flex-end}.queue-actions{display:grid}.presence-chip{display:none}.pick-tile.traded .traded-to{max-width:65px;font-size:8px}}
+
+/* Milestone 6.1 final polish */
+#playerActionArea{display:grid;gap:8px}
+.hide-drafted-control{
+  display:inline-flex!important;
+  align-items:center;
+  gap:7px;
+  width:auto!important;
+  min-width:0!important;
+  padding:5px 8px!important;
+  border:1px solid var(--line)!important;
+  border-radius:9px!important;
+  background:#fff!important;
+  line-height:1.1
+}
+.hide-drafted-control input{
+  width:auto!important;
+  margin:0!important;
+  flex:0 0 auto
+}
+.hide-drafted-control span{
+  white-space:nowrap
+}
