@@ -213,3 +213,9 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(62,1
   margin:0!important;
   padding:0!important
 }
+
+/* Milestone 6.5 */
+.queue-player-name{border:0;background:transparent;color:var(--navy);padding:0;font:inherit;font-weight:950;text-align:left;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.queue-player-name:hover{color:var(--blue);text-decoration:underline}
+.queue-draft-button{border:1px solid var(--blue);background:var(--blue);color:#fff;border-radius:8px;padding:7px 9px;font-size:10px;font-weight:950;white-space:nowrap}
+.queue-draft-button:disabled{opacity:.42;cursor:not-allowed}

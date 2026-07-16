@@ -7,7 +7,7 @@ import {
   getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs,
   serverTimestamp, query, orderBy, onSnapshot, runTransaction, addDoc
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=640";
+import { firebaseConfig } from "./firebase-config.js?v=650";
 
 const TEAM_ACCOUNTS = [
   { team:"YoByronWatkins", email:"byronwatkins@gmail.com", draftPosition:1 },
@@ -44,6 +44,7 @@ let playerPositionFilter="ALL";
 let playerSortKey="fantasy_points";
 let playerSortDirection="desc";
 let selectedPlayerId=null;
+let playerProfileSource="drawer";
 let commissionerDraftMode=null;
 let assumedTeam=null;
 let tradeOffers=[];
@@ -112,6 +113,8 @@ $("assumeIdentitySelect").onchange=()=>{
   refreshSignedInIdentity();
   updatePlayerDraftButton();
   renderTradeCenter();
+  if(unsubscribeQueue)unsubscribeQueue();
+  unsubscribeQueue=onSnapshot(doc(db,"queues",effectiveQueueTeam()),snap=>{queueItems=snap.exists()?(snap.data().items||[]):[];renderQueue();updateQueuePlayerButton()});
 };
 
 $("registerTeam").innerHTML=`<option value="">Choose your assigned team</option>`+
@@ -290,7 +293,7 @@ function renderBoard(){
   document.querySelectorAll(".pick-tile.has-player[data-pick-index]").forEach(tile=>tile.onclick=event=>{
     if(event.target.closest(".trade-detail-footer"))return;
     const selection=draftSelections[String(tile.dataset.pickIndex)];
-    if(selection)openPlayerProfile(selection.playerId);
+    if(selection)openPlayerProfile(selection.playerId,"board");
   });
   applyOverflowTooltips($("draftBoard"));
 }
@@ -489,12 +492,13 @@ function renderPlayerRows(){
       <td class="${player.fantasy_points?"fp-value":"fp-pending"}">${isDrafted?`<span class="drafted-label">DRAFTED</span><span class="drafted-label-detail">Pick #${selection.pickIndex+1}</span>`:displayFantasyPoints(player)}</td>
     </tr>`;
   }).join(""):`<tr><td colspan="6"><div class="empty-state">No players match the selected filters.</div></td></tr>`;
-  document.querySelectorAll("#playerRows tr[data-player-id]").forEach(row=>row.onclick=()=>openPlayerProfile(row.dataset.playerId));
+  document.querySelectorAll("#playerRows tr[data-player-id]").forEach(row=>row.onclick=()=>openPlayerProfile(row.dataset.playerId,"drawer"));
   applyOverflowTooltips($("playerRows"));
 }
-function openPlayerProfile(id){
+function openPlayerProfile(id,source="drawer"){
   const player=players.find(x=>x.id===id);if(!player)return;
   selectedPlayerId=id;
+  playerProfileSource=source;
   $("playerModalLevel").textContent=`${player.level} player profile`;$("playerModalName").textContent=player.name;
   $("playerModalMeta").textContent=player.level==="NFL"?`${player.position} • ${player.team}`:`${player.position} • ${player.team} • ${player.class_year||"Class not listed"}`;
   $("playerModalPosition").textContent=player.position||"—";$("playerModalTeam").textContent=player.team||player.school||"—";
@@ -507,7 +511,9 @@ function openPlayerProfile(id){
 function closePlayerProfile(){
   $("playerModal").classList.add("hidden");
   selectedPlayerId=null;
-  if($("playerDrawer"))$("playerDrawer").classList.add("open");
+  if(playerProfileSource==="drawer"||playerProfileSource==="queue")$("playerDrawer").classList.add("open");
+  else $("playerDrawer").classList.remove("open");
+  playerProfileSource="drawer";
   updateDrawerBackdrop();
 }
 
@@ -586,14 +592,16 @@ function renderDraftedPlayerInfo(player){
   box.innerHTML=`<div class="drafted-info-grid"><div><span>Drafted at</span><strong>Pick #${selection.pickIndex+1}</strong></div><div><span>Drafted by</span><strong>${safe(originalOwner)}</strong></div><div><span>${currentOwner!==originalOwner?"Traded to":"Current owner"}</span><strong>${safe(currentOwner)}</strong></div></div>${relevant.length?`<div class="drafted-history">${relevant.length} trade record${relevant.length===1?"":"s"} attached to this asset.</div>`:""}`;
   box.classList.remove("hidden");
 }
+function effectiveQueueTeam(){return actingTeam()||currentProfile?.team||auth.currentUser?.uid}
 function queueContains(id){return queueItems.includes(id)}
 function updateQueuePlayerButton(){
   if(!$("queuePlayerButton"))return;
   $("queuePlayerButton").textContent=queueContains(selectedPlayerId)?"Remove from Queue":"Add to Queue";
 }
 async function saveQueue(items){
-  if(!auth.currentUser)return;
-  await setDoc(doc(db,"queues",auth.currentUser.uid),{uid:auth.currentUser.uid,team:currentProfile.team,items,updatedAt:serverTimestamp()},{merge:true});
+  if(!auth.currentUser||!currentProfile)return;
+  const team=effectiveQueueTeam();
+  await setDoc(doc(db,"queues",team),{team,ownerUid:auth.currentUser.uid,items,updatedAt:serverTimestamp()},{merge:true});
 }
 async function pruneDraftedQueue(){
   if(!auth.currentUser||!queueItems.length)return;
@@ -610,24 +618,29 @@ async function toggleSelectedPlayerQueue(){
 function renderQueue(){
   const drafted=draftedPlayerIds(),available=queueItems.filter(id=>!drafted.has(id)&&playerById(id));
   $("queueCountBadge").textContent=available.length;
-  $("queueList").innerHTML=available.length?available.map((id,index)=>{const p=playerById(id);return `<div class="queue-row"><div class="queue-rank">${index+1}</div><div class="queue-row-main"><strong data-full-text="${safe(p.name)}">${safe(p.name)}</strong><span>${safe(p.position)} • ${safe(p.team||p.school||"—")} • ${displayFantasyPoints(p)} FP</span></div><div class="queue-row-actions"><button class="btn small" data-queue-up="${index}" ${index===0?"disabled":""}>↑</button><button class="btn small" data-queue-down="${index}" ${index===available.length-1?"disabled":""}>↓</button><button class="btn danger small" data-queue-remove="${id}">×</button></div></div>`}).join(""):`<div class="empty-state">Your queue is empty.</div>`;
-  document.querySelectorAll("[data-queue-up]").forEach(b=>b.onclick=()=>moveQueue(Number(b.dataset.queueUp),-1));
-  document.querySelectorAll("[data-queue-down]").forEach(b=>b.onclick=()=>moveQueue(Number(b.dataset.queueDown),1));
-  document.querySelectorAll("[data-queue-remove]").forEach(b=>b.onclick=()=>saveQueue(queueItems.filter(id=>id!==b.dataset.queueRemove)));
+  $("queueList").innerHTML=available.length?available.map((id,index)=>{
+    const p=playerById(id),canDraft=normalDraftAllowed();
+    return `<div class="queue-row"><div class="queue-rank">${index+1}</div><div class="queue-row-main"><button class="queue-player-name" type="button" data-queue-player-card="${safe(id)}" data-full-text="${safe(p.name)}">${safe(p.name)}</button><span>${safe(p.position)} • ${safe(p.team||p.school||"—")} • ${displayFantasyPoints(p)} FP</span></div><div class="queue-row-actions"><button class="queue-draft-button" type="button" data-queue-draft="${safe(id)}" ${canDraft?"":"disabled"}>Draft</button><button class="btn small" data-queue-up="${index}" ${index===0?"disabled":""}>↑</button><button class="btn small" data-queue-down="${index}" ${index===available.length-1?"disabled":""}>↓</button><button class="btn danger small" data-queue-remove="${safe(id)}">×</button></div></div>`;
+  }).join(""):`<div class="empty-state">Your queue is empty.</div>`;
+  document.querySelectorAll("[data-queue-player-card]").forEach(button=>button.onclick=()=>openPlayerProfile(button.dataset.queuePlayerCard,"queue"));
+  document.querySelectorAll("[data-queue-draft]").forEach(button=>button.onclick=()=>draftQueuePlayer(button.dataset.queueDraft));
+  document.querySelectorAll("[data-queue-up]").forEach(button=>button.onclick=()=>moveQueue(Number(button.dataset.queueUp),-1));
+  document.querySelectorAll("[data-queue-down]").forEach(button=>button.onclick=()=>moveQueue(Number(button.dataset.queueDown),1));
+  document.querySelectorAll("[data-queue-remove]").forEach(button=>button.onclick=()=>saveQueue(queueItems.filter(id=>id!==button.dataset.queueRemove)));
   applyOverflowTooltips($("queueList"));
+}
+async function draftQueuePlayer(playerId){
+  if(draftedPlayerIds().has(playerId))return toast("Player Already Drafted");
+  if(!normalDraftAllowed())return toast(`${currentPickOwner()||"Another team"} is on the clock`);
+  selectedPlayerId=playerId;
+  playerProfileSource="queue";
+  await saveDraftSelection();
 }
 async function moveQueue(index,direction){
   const drafted=draftedPlayerIds(),visible=queueItems.filter(id=>!drafted.has(id)&&playerById(id));
   const target=index+direction;if(target<0||target>=visible.length)return;
   [visible[index],visible[target]]=[visible[target],visible[index]];
   const unavailable=queueItems.filter(id=>!visible.includes(id));await saveQueue([...visible,...unavailable]);
-}
-async function draftTopQueue(){
-  const playerId=queueItems.find(id=>!draftedPlayerIds().has(id)&&playerById(id));
-  if(!playerId)return toast("No available queued players");
-  openPlayerProfile(playerId);
-  if($("draftPlayerButton").disabled)return toast("You cannot draft right now");
-  await saveDraftSelection();
 }
 function activePresence(){
   const cutoff=Date.now()-150000;
@@ -644,8 +657,10 @@ async function updatePresence(view=currentView,online=true){
   try{await setDoc(doc(db,"presence",auth.currentUser.uid),{uid:auth.currentUser.uid,team:currentProfile.team,view,currentPick:liveDraftState?.currentPick??0,online,lastSeen:serverTimestamp()},{merge:true})}catch(error){console.warn("Presence update failed",error)}
 }
 function subscribeToQueueAndPresence(){
-  if(unsubscribeQueue)unsubscribeQueue();if(unsubscribePresence)unsubscribePresence();if(presenceTimer)clearInterval(presenceTimer);
-  unsubscribeQueue=onSnapshot(doc(db,"queues",auth.currentUser.uid),snap=>{queueItems=snap.exists()?(snap.data().items||[]):[];renderQueue();updateQueuePlayerButton()});
+  if(unsubscribeQueue)unsubscribeQueue();
+  if(unsubscribePresence)unsubscribePresence();
+  if(presenceTimer)clearInterval(presenceTimer);
+  unsubscribeQueue=onSnapshot(doc(db,"queues",effectiveQueueTeam()),snap=>{queueItems=snap.exists()?(snap.data().items||[]):[];renderQueue();updateQueuePlayerButton()});
   unsubscribePresence=onSnapshot(collection(db,"presence"),snapshot=>{presenceEntries=snapshot.docs.map(d=>d.data());renderPresence()});
   updatePresence("Draft Board",true);presenceTimer=setInterval(()=>updatePresence(currentView,true),60000);
 }
@@ -972,7 +987,6 @@ $("closeQueueModal").onclick=()=>{
 };
 $("queueModal").onclick=event=>{if(event.target===$("queueModal"))$("closeQueueModal").click()};
 $("clearQueueButton").onclick=()=>{if(confirm("Clear your entire private queue?"))saveQueue([])};
-$("draftTopQueueButton").onclick=draftTopQueue;
 $("presenceChip").onclick=()=>{$("presenceModal").classList.remove("hidden");renderPresence()};
 $("closePresenceModal").onclick=()=>$("presenceModal").classList.add("hidden");
 $("presenceModal").onclick=event=>{if(event.target===$("presenceModal"))$("presenceModal").classList.add("hidden")};
