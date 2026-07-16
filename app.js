@@ -7,7 +7,7 @@ import {
   getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs,
   serverTimestamp, query, orderBy, onSnapshot, runTransaction, addDoc
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=610";
+import { firebaseConfig } from "./firebase-config.js?v=620";
 
 const TEAM_ACCOUNTS = [
   { team:"YoByronWatkins", email:"byronwatkins@gmail.com", draftPosition:1 },
@@ -504,7 +504,12 @@ function openPlayerProfile(id){
   updateQueuePlayerButton();
   updatePlayerDraftButton();$("playerModal").classList.remove("hidden");
 }
-function closePlayerProfile(){$("playerModal").classList.add("hidden");selectedPlayerId=null}
+function closePlayerProfile(){
+  $("playerModal").classList.add("hidden");
+  selectedPlayerId=null;
+  if($("playerDrawer"))$("playerDrawer").classList.add("open");
+  updateDrawerBackdrop();
+}
 
 function closePlayerDrawer(){
   $("playerDrawer").classList.remove("open");
@@ -524,7 +529,7 @@ function updateDrawerBackdrop(){
     backdrop.addEventListener("click",event=>{
       if(event.target!==backdrop)return;
       closeCommissionerDrawer();
-      if($("tradeDrawer"))$("tradeDrawer").classList.remove("open");
+      $("tradeDrawer").classList.remove("open");
       updateDrawerBackdrop();
     });
   }
@@ -587,8 +592,10 @@ async function pruneDraftedQueue(){
 }
 async function toggleSelectedPlayerQueue(){
   if(!selectedPlayerId)return;
-  const next=queueContains(selectedPlayerId)?queueItems.filter(id=>id!==selectedPlayerId):[...queueItems,selectedPlayerId];
-  await saveQueue(next);toast(queueContains(selectedPlayerId)?"Removed from queue":"Added to queue");
+  const wasQueued=queueContains(selectedPlayerId);
+  const next=wasQueued?queueItems.filter(id=>id!==selectedPlayerId):[...queueItems,selectedPlayerId];
+  await saveQueue(next);
+  toast(wasQueued?"Removed from Queue":"Added to Queue");
 }
 function renderQueue(){
   const drafted=draftedPlayerIds(),available=queueItems.filter(id=>!drafted.has(id)&&playerById(id));
@@ -653,18 +660,19 @@ function normalDraftAllowed(){
   return currentProfile&&liveDraftState?.initialized&&liveDraftState.status==="running"&&liveDraftState.currentPick<TOTAL_PICKS&&(currentProfile.role==="commissioner"||actingTeam()===currentPickOwner());
 }
 function updatePlayerDraftButton(){
-  const selectedPlayer=playerById(selectedPlayerId);
-  const isDraftedPlayer=selectedPlayer && draftedPlayerIds().has(selectedPlayer.id);
-  if($("playerActionArea"))$("playerActionArea").classList.toggle("hidden",Boolean(isDraftedPlayer));
-
   if(!$("draftPlayerButton"))return;
   const player=playerById(selectedPlayerId),drafted=player&&draftedPlayerIds().has(player.id);
+  const actionArea=$("playerModalActionArea");
+
+  if(actionArea)actionArea.classList.toggle("hidden",Boolean(drafted));
+  if(drafted)return;
+
   const editing=currentProfile?.role==="commissioner"&&commissionerDraftMode?.type==="edit";
   const forcing=currentProfile?.role==="commissioner"&&commissionerDraftMode?.type==="force";
-  const allowed=!drafted&&(editing||forcing||normalDraftAllowed());
+  const allowed=editing||forcing||normalDraftAllowed();
   $("draftPlayerButton").disabled=!allowed;
-  if(drafted){$("draftPlayerButton").textContent="Player Already Drafted";$("draftPlayerHint").textContent="This player is no longer available."}
-  else if(editing){$("draftPlayerButton").textContent="Save Replacement Player";$("draftPlayerHint").textContent=`Replace Pick #${commissionerDraftMode.pickIndex+1}.`}
+
+  if(editing){$("draftPlayerButton").textContent="Save Replacement Player";$("draftPlayerHint").textContent=`Replace Pick #${commissionerDraftMode.pickIndex+1}.`}
   else if(forcing){$("draftPlayerButton").textContent="Force Draft Player";$("draftPlayerHint").textContent=`Force Pick #${liveDraftState.currentPick+1} for ${currentPickOwner()}.`}
   else if(normalDraftAllowed()){$("draftPlayerButton").textContent="Draft Player";$("draftPlayerHint").textContent=`Draft for ${currentPickOwner()} at Pick #${liveDraftState.currentPick+1}${assumedTeam?` while testing as ${assumedTeam}`:""}.`}
   else if(liveDraftState?.status==="paused"){$("draftPlayerButton").textContent="Draft Paused";$("draftPlayerHint").textContent="The commissioner must resume the draft."}
@@ -935,7 +943,12 @@ async function revertTrade(id){
 $("hideDraftedToggle").onchange=()=>{hideDraftedPlayers=$("hideDraftedToggle").checked;renderPlayerRows()};
 $("queuePlayerButton").onclick=toggleSelectedPlayerQueue;
 $("openQueueButton").onclick=()=>{$("queueModal").classList.remove("hidden");renderQueue();updatePresence("Viewing Queue",true)};
-$("closeQueueModal").onclick=()=>{$("queueModal").classList.add("hidden");updatePresence("Viewing Player Pool",true)};
+$("closeQueueModal").onclick=()=>{
+  $("queueModal").classList.add("hidden");
+  $("playerDrawer").classList.add("open");
+  updateDrawerBackdrop();
+  updatePresence("Viewing Player Pool",true);
+};
 $("queueModal").onclick=event=>{if(event.target===$("queueModal"))$("closeQueueModal").click()};
 $("clearQueueButton").onclick=()=>{if(confirm("Clear your entire private queue?"))saveQueue([])};
 $("draftTopQueueButton").onclick=draftTopQueue;
@@ -964,30 +977,15 @@ document.querySelectorAll("[data-sort]").forEach(button=>{
   });
 });
 
-// Clicking the uncovered draft-board area closes either open drawer.
+// Drawers close only when the user returns to the draft-board area.
 document.addEventListener("click",event=>{
-  const playerOpen=$("playerDrawer").classList.contains("open");
-  const commissionerOpen=$("commissionerDrawer").classList.contains("open");
-  const tradeOpen=$("tradeDrawer")?.classList.contains("open");
-  const queueOpen=$("queueDrawer")?.classList.contains("open");
+  const clickedDraftBoard=Boolean(event.target.closest(".draft-shell")||event.target.closest(".board-scroll"));
+  if(!clickedDraftBoard)return;
 
-  const clickedDraftBoard=event.target.closest(".draft-shell") || event.target.closest(".board-scroll");
-  const clickedPlayerUI=event.target.closest("#playerDrawer") || event.target.closest("#playerModal") || event.target.closest("#queueDrawer") || event.target.closest("#playerRail");
-  const clickedCommissionerUI=event.target.closest("#commissionerDrawer") || event.target.closest("#commissionerRail") || event.target.closest("#commissionerToggle");
-  const clickedTradeUI=event.target.closest("#tradeDrawer") || event.target.closest("#tradeRail") || event.target.closest("#tradeDetailModal");
-
-  if(playerOpen && clickedDraftBoard && !clickedPlayerUI){
-    closePlayerDrawer();
-  }
-  if(commissionerOpen && clickedDraftBoard && !clickedCommissionerUI){
-    closeCommissionerDrawer();
-  }
-  if(tradeOpen && clickedDraftBoard && !clickedTradeUI){
+  if($("playerDrawer").classList.contains("open"))closePlayerDrawer();
+  if($("commissionerDrawer").classList.contains("open"))closeCommissionerDrawer();
+  if($("tradeDrawer").classList.contains("open")){
     $("tradeDrawer").classList.remove("open");
-    updateDrawerBackdrop();
-  }
-  if(queueOpen && clickedDraftBoard && !clickedPlayerUI){
-    $("queueDrawer").classList.remove("open");
     updateDrawerBackdrop();
   }
 });
@@ -997,12 +995,5 @@ $("advancePick").textContent="Force Pick";$("previousPick").textContent="Undo La
 $("advancePick").onclick=forceBestAvailablePick;
 $("previousPick").onclick=undoLastPick;
 const editButton=document.createElement("button");editButton.id="editCompletedPick";editButton.className="btn";editButton.textContent="Edit Pick";editButton.onclick=editPick;$("resetDraftState").before(editButton);
-
-
-const hideDraftedCheckbox=$("hideDraftedPlayers");
-if(hideDraftedCheckbox){
-  const label=hideDraftedCheckbox.closest("label");
-  if(label)label.classList.add("hide-drafted-control");
-}
 
 onAuthStateChanged(auth,user=>user?loadCurrentUser(user):loadCurrentUser(null));

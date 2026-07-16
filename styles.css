@@ -185,25 +185,31 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(62,1
 @media(max-width:800px){.drafted-info-grid{grid-template-columns:1fr}.player-modal-actions{grid-template-columns:1fr}.player-toolbar{gap:7px}.drafted-toggle{order:5}.commissioner-metrics{grid-template-columns:1fr 1fr}}
 @media(max-width:520px){.queue-row{grid-template-columns:30px 1fr}.queue-row-actions{grid-column:2;justify-content:flex-end}.queue-actions{display:grid}.presence-chip{display:none}.pick-tile.traded .traded-to{max-width:65px;font-size:8px}}
 
-/* Milestone 6.1 final polish */
-#playerActionArea{display:grid;gap:8px}
-.hide-drafted-control{
+/* Milestone 6.2 corrected final polish */
+#playerModalActionArea.hidden{display:none!important}
+
+/* Prevent the global player-toolbar input rule from stretching the checkbox. */
+.player-toolbar .drafted-toggle{
   display:inline-flex!important;
-  align-items:center;
-  gap:7px;
+  flex:0 0 auto!important;
   width:auto!important;
   min-width:0!important;
+  align-items:center!important;
+  justify-content:flex-start!important;
+  gap:6px!important;
   padding:5px 8px!important;
+  margin:0!important;
   border:1px solid var(--line)!important;
   border-radius:9px!important;
-  background:#fff!important;
-  line-height:1.1
+  background:#f7fafc!important;
+  white-space:nowrap!important;
+  line-height:1.1!important
 }
-.hide-drafted-control input{
-  width:auto!important;
+.player-toolbar .drafted-toggle input{
+  flex:0 0 auto!important;
+  width:16px!important;
+  min-width:16px!important;
+  height:16px!important;
   margin:0!important;
-  flex:0 0 auto
-}
-.hide-drafted-control span{
-  white-space:nowrap
+  padding:0!important
 }
