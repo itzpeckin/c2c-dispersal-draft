@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#17324d">
   <title>C2C Dispersal Draft</title>
-  <link rel="stylesheet" href="./styles.css?v=300">
+  <link rel="stylesheet" href="./styles.css?v=310">
 </head>
 <body>
   <div id="loadingScreen" class="screen center-screen">
@@ -151,12 +151,12 @@
         <table class="player-table">
           <thead>
             <tr>
-              <th>Player</th>
-              <th>Level</th>
-              <th>Pos</th>
-              <th>Team / School</th>
-              <th>Class</th>
-              <th>Previous Season FP</th>
+              <th><button class="sort-btn" type="button" data-sort="name">Player <span class="sort-arrow"></span></button></th>
+              <th><button class="sort-btn" type="button" data-sort="level">Level <span class="sort-arrow"></span></button></th>
+              <th><button class="sort-btn" type="button" data-sort="position">Pos <span class="sort-arrow"></span></button></th>
+              <th><button class="sort-btn" type="button" data-sort="team">Team / School <span class="sort-arrow"></span></button></th>
+              <th><button class="sort-btn" type="button" data-sort="class_year">Class <span class="sort-arrow"></span></button></th>
+              <th><button class="sort-btn active" type="button" data-sort="fantasy_points">Previous Season FP <span class="sort-arrow">▼</span></button></th>
             </tr>
           </thead>
           <tbody id="playerRows"></tbody>
@@ -228,6 +228,6 @@
   </div>
 
   <div id="toast" class="toast"></div>
-  <script type="module" src="./app.js?v=300"></script>
+  <script type="module" src="./app.js?v=310"></script>
 </body>
 </html>

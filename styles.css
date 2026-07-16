@@ -87,3 +87,37 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(62,1
   .player-stat-grid{grid-template-columns:1fr}
   .player-stat-grid .fp-card{grid-column:auto}
 }
+
+/* Milestone 3.1: sorting and click-away drawer behavior */
+.sort-btn{
+  width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  gap:5px;
+  border:0;
+  background:transparent;
+  color:inherit;
+  padding:0;
+  font:inherit;
+  text-transform:inherit;
+  letter-spacing:inherit;
+  cursor:pointer;
+  text-align:left
+}
+.sort-btn:hover{color:var(--blue)}
+.sort-btn.active{color:var(--blue)}
+.sort-arrow{display:inline-block;min-width:10px;font-size:9px}
+.drawer-backdrop{
+  position:fixed;
+  inset:72px 0 0;
+  z-index:35;
+  background:rgba(17,38,58,.08);
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .2s ease
+}
+.drawer-backdrop.show{opacity:1;pointer-events:auto}
+@media(max-width:900px){
+  .drawer-backdrop{inset:0}
+}

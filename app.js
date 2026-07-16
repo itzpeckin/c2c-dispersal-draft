@@ -7,7 +7,7 @@ import {
   getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs,
   serverTimestamp, query, orderBy, onSnapshot
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=300";
+import { firebaseConfig } from "./firebase-config.js?v=310";
 
 const TEAM_ACCOUNTS = [
   { team:"YoByronWatkins", email:"byronwatkins@gmail.com", draftPosition:1 },
@@ -39,6 +39,8 @@ let unsubscribeDraft=null;
 let players=[];
 let playerLevelFilter="ALL";
 let playerPositionFilter="ALL";
+let playerSortKey="fantasy_points";
+let playerSortDirection="desc";
 
 function normalizeEmail(v){return String(v||"").trim().toLowerCase()}
 function accountForEmail(email){return TEAM_ACCOUNTS.find(x=>x.email===normalizeEmail(email))}
@@ -274,8 +276,12 @@ $("resetDraftState").onclick=async()=>{
   toast("Live draft state reset");
 };
 
-$("commissionerToggle").onclick=$("commissionerRail").onclick=()=>{$("commissionerDrawer").classList.add("open")};
-$("closeCommissioner").onclick=()=>$("commissionerDrawer").classList.remove("open");
+$("commissionerToggle").onclick=$("commissionerRail").onclick=()=>{
+  closePlayerDrawer();
+  $("commissionerDrawer").classList.add("open");
+  updateDrawerBackdrop();
+};
+$("closeCommissioner").onclick=closeCommissionerDrawer;
 $("refreshMembers").onclick=loadMemberDashboard;
 
 async function loadMemberDashboard(){
@@ -350,13 +356,34 @@ async function loadPlayers(){
     toast("Player pool could not be loaded");
   }
 }
+function playerSortValue(player,key){
+  if(key==="fantasy_points"){
+    const value=Number(player.fantasy_points);
+    return Number.isFinite(value)?value:-Infinity;
+  }
+  if(key==="class_year"){
+    const raw=String(player.class_year||"").trim();
+    const classOrder={"FR":1,"FRESHMAN":1,"SO":2,"SOPHOMORE":2,"JR":3,"JUNIOR":3,"SR":4,"SENIOR":4,"GR":5,"GRADUATE":5};
+    return classOrder[raw.toUpperCase()] ?? raw.toLowerCase();
+  }
+  return String(player[key]||"").toLowerCase();
+}
+function comparePlayerValues(a,b){
+  if(typeof a==="number"&&typeof b==="number")return a-b;
+  return String(a).localeCompare(String(b),undefined,{numeric:true,sensitivity:"base"});
+}
 function filteredPlayers(){
   const term=$("playerSearch").value.trim().toLowerCase();
-  return players.filter(player=>{
+  const filtered=players.filter(player=>{
     const levelOk=playerLevelFilter==="ALL"||player.level===playerLevelFilter;
     const positionOk=playerPositionFilter==="ALL"||player.position===playerPositionFilter;
-    const haystack=`${player.name} ${player.team} ${player.school} ${player.position} ${player.level}`.toLowerCase();
+    const haystack=`${player.name} ${player.team} ${player.school} ${player.position} ${player.level} ${player.class_year}`.toLowerCase();
     return levelOk&&positionOk&&(!term||haystack.includes(term));
+  });
+  return filtered.sort((a,b)=>{
+    const primary=comparePlayerValues(playerSortValue(a,playerSortKey),playerSortValue(b,playerSortKey));
+    if(primary!==0)return playerSortDirection==="asc"?primary:-primary;
+    return a.name.localeCompare(b.name);
   });
 }
 function displayFantasyPoints(player){
@@ -399,8 +426,36 @@ function openPlayerProfile(id){
 }
 function closePlayerProfile(){$("playerModal").classList.add("hidden")}
 
-$("playerRail").onclick=()=>{$("playerDrawer").classList.add("open");renderPlayerRows()};
-$("closePlayerDrawer").onclick=()=>$("playerDrawer").classList.remove("open");
+function closePlayerDrawer(){
+  $("playerDrawer").classList.remove("open");
+  updateDrawerBackdrop();
+}
+function closeCommissionerDrawer(){
+  $("commissionerDrawer").classList.remove("open");
+  updateDrawerBackdrop();
+}
+function updateDrawerBackdrop(){
+  let backdrop=$("drawerBackdrop");
+  if(!backdrop){
+    backdrop=document.createElement("div");
+    backdrop.id="drawerBackdrop";
+    backdrop.className="drawer-backdrop";
+    document.body.appendChild(backdrop);
+    backdrop.addEventListener("click",()=>{
+      closePlayerDrawer();
+      closeCommissionerDrawer();
+    });
+  }
+  const anyOpen=$("playerDrawer").classList.contains("open")||$("commissionerDrawer").classList.contains("open");
+  backdrop.classList.toggle("show",anyOpen);
+}
+$("playerRail").onclick=()=>{
+  closeCommissionerDrawer();
+  $("playerDrawer").classList.add("open");
+  updateDrawerBackdrop();
+  renderPlayerRows();
+};
+$("closePlayerDrawer").onclick=closePlayerDrawer;
 $("closePlayerModal").onclick=closePlayerProfile;
 $("playerModal").onclick=event=>{if(event.target===$("playerModal"))closePlayerProfile()};
 $("playerSearch").oninput=renderPlayerRows;
@@ -413,6 +468,41 @@ document.querySelectorAll("[data-position]").forEach(button=>button.onclick=()=>
   playerPositionFilter=button.dataset.position;
   document.querySelectorAll("[data-position]").forEach(x=>x.classList.toggle("active",x===button));
   renderPlayerRows();
+});
+
+
+document.querySelectorAll("[data-sort]").forEach(button=>{
+  button.addEventListener("click",()=>{
+    const key=button.dataset.sort;
+    if(playerSortKey===key){
+      playerSortDirection=playerSortDirection==="asc"?"desc":"asc";
+    }else{
+      playerSortKey=key;
+      playerSortDirection=key==="fantasy_points"?"desc":"asc";
+    }
+    document.querySelectorAll("[data-sort]").forEach(sortButton=>{
+      const active=sortButton.dataset.sort===playerSortKey;
+      sortButton.classList.toggle("active",active);
+      const arrow=sortButton.querySelector(".sort-arrow");
+      if(arrow)arrow.textContent=active?(playerSortDirection==="asc"?"▲":"▼"):"";
+    });
+    renderPlayerRows();
+  });
+});
+
+// Clicking the uncovered draft-board area closes either open drawer.
+document.addEventListener("click",event=>{
+  const playerOpen=$("playerDrawer").classList.contains("open");
+  const commissionerOpen=$("commissionerDrawer").classList.contains("open");
+  if(!playerOpen&&!commissionerOpen)return;
+
+  const insidePlayer=$("playerDrawer").contains(event.target)||$("playerRail").contains(event.target);
+  const insideCommissioner=$("commissionerDrawer").contains(event.target)
+    ||$("commissionerRail").contains(event.target)
+    ||(!$("commissionerToggle").classList.contains("hidden")&&$("commissionerToggle").contains(event.target));
+
+  if(playerOpen&&!insidePlayer)closePlayerDrawer();
+  if(commissionerOpen&&!insideCommissioner)closeCommissionerDrawer();
 });
 
 
