@@ -7,7 +7,7 @@ import {
   getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs,
   serverTimestamp, query, orderBy, onSnapshot, runTransaction, addDoc
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=660";
+import { firebaseConfig } from "./firebase-config.js?v=670";
 
 const TEAM_ACCOUNTS = [
   { team:"YoByronWatkins", email:"byronwatkins@gmail.com", draftPosition:1 },
@@ -508,23 +508,34 @@ function renderPlayerRows(){
     const owner=selection?currentOwnerForPick(selection.pickIndex):null;
     const draftedText=selection?`Drafted • Pick #${Number(selection.pickIndex)+1} • Current owner: ${owner}`:"Drafted";
     const queued=queueContains(player.id);
+    const canQuickDraft=!isDrafted&&normalDraftAllowed();
+
     return `<tr class="${isDrafted?"drafted":""}" data-player-id="${safe(player.id)}">
       <td class="player-name-cell">
         <div class="player-name-line">
-          <button class="quick-queue-button ${queued?"queued":""}" type="button" data-quick-queue="${safe(player.id)}" ${isDrafted?"disabled":""} title="${queued?"Remove from Queue":"Add to Queue"}">${queued?"✓":"+"}</button>
+          <button class="quick-queue-button ${queued?"queued":""}" type="button" data-quick-queue="${safe(player.id)}" ${isDrafted?"disabled":""} title="${queued?"Remove from Queue":"Add to Queue"}">${queued?"−":"+"}</button>
           <strong class="player-name-text">${safe(player.name)}</strong>
         </div>
         <span>${isDrafted?safe(draftedText):(player.level==="NFL"?`Sleeper roster ${safe(player.source_roster)} • ${safe(player.roster_slot)}`:"Fantrax player pool")}</span>
       </td>
-      <td><span class="level-pill ${player.level.toLowerCase()}">${safe(player.level)}</span></td><td><span class="position-pill">${safe(player.position)}</span></td>
-      <td>${safe(player.team||player.school||"—")}</td><td>${safe(player.class_year||"—")}</td>
-      <td class="${player.fantasy_points?"fp-value":"fp-pending"}">${isDrafted?`<span class="drafted-label">DRAFTED</span><span class="drafted-label-detail">Pick #${selection.pickIndex+1}</span>`:displayFantasyPoints(player)}</td>
+      <td><span class="level-pill ${player.level.toLowerCase()}">${safe(player.level)}</span></td>
+      <td><span class="position-pill">${safe(player.position)}</span></td>
+      <td>${safe(player.team||player.school||"—")}</td>
+      <td>${safe(player.class_year||"—")}</td>
+      <td class="${player.fantasy_points?"fp-value":"fp-pending"}">
+        <div class="player-row-actions">
+          <span>${isDrafted?`<span class="drafted-label">DRAFTED</span><span class="drafted-label-detail">Pick #${selection.pickIndex+1}</span>`:displayFantasyPoints(player)}</span>
+          ${isDrafted?"":`<button class="quick-draft-button" type="button" data-quick-draft="${safe(player.id)}" ${canQuickDraft?"":"disabled"}>Draft</button>`}
+        </div>
+      </td>
     </tr>`;
   }).join(""):`<tr><td colspan="6"><div class="empty-state">No players match the selected filters.</div></td></tr>`;
+
   document.querySelectorAll("#playerRows tr[data-player-id]").forEach(row=>row.onclick=event=>{
-    if(event.target.closest("[data-quick-queue]"))return;
+    if(event.target.closest("[data-quick-queue]")||event.target.closest("[data-quick-draft]"))return;
     openPlayerProfile(row.dataset.playerId,"drawer");
   });
+
   document.querySelectorAll("[data-quick-queue]").forEach(button=>button.onclick=async event=>{
     event.stopPropagation();
     const playerId=button.dataset.quickQueue;
@@ -533,6 +544,12 @@ function renderPlayerRows(){
     await saveQueue(next);
     toast(wasQueued?"Removed from Queue":"Added to Queue");
   });
+
+  document.querySelectorAll("[data-quick-draft]").forEach(button=>button.onclick=async event=>{
+    event.stopPropagation();
+    await draftPlayerDirectly(button.dataset.quickDraft);
+  });
+
   applyOverflowTooltips($("playerRows"));
 }
 function openPlayerProfile(id,source="drawer"){
@@ -668,6 +685,16 @@ function renderQueue(){
   document.querySelectorAll("[data-queue-down]").forEach(button=>button.onclick=()=>moveQueue(Number(button.dataset.queueDown),1));
   document.querySelectorAll("[data-queue-remove]").forEach(button=>button.onclick=()=>saveQueue(queueItems.filter(id=>id!==button.dataset.queueRemove)));
   applyOverflowTooltips($("queueList"));
+}
+async function draftPlayerDirectly(playerId){
+  const player=playerById(playerId);
+  if(!player)return;
+  if(draftedPlayerIds().has(playerId))return toast("Player Already Drafted");
+  if(!normalDraftAllowed())return toast(`${currentPickOwner()||"Another team"} is on the clock`);
+
+  selectedPlayerId=playerId;
+  playerProfileSource="drawer";
+  await saveDraftSelection();
 }
 async function draftQueuePlayer(playerId){
   if(draftedPlayerIds().has(playerId))return toast("Player Already Drafted");

@@ -297,3 +297,29 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(62,1
   text-overflow:ellipsis;
   white-space:nowrap
 }
+
+/* Milestone 6.7 */
+.quick-queue-button.queued{
+  background:#f5e3e6;
+  border-color:#e7bcc3;
+  color:var(--red)
+}
+.quick-draft-button{
+  border:1px solid var(--blue);
+  background:var(--blue);
+  color:#fff;
+  border-radius:8px;
+  padding:6px 9px;
+  font-size:10px;
+  font-weight:950;
+  white-space:nowrap;
+  cursor:pointer
+}
+.quick-draft-button:hover{filter:brightness(.97)}
+.quick-draft-button:disabled{opacity:.35;cursor:not-allowed}
+.player-row-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:7px
+}
