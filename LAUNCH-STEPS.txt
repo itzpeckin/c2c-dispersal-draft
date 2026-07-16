@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#17324d">
+  <title>C2C Dispersal Draft</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="loadingScreen" class="screen center-screen"><div class="loader"></div><h2>Loading C2C Dispersal Draft…</h2></div>
+
+<section id="authScreen" class="screen center-screen hidden">
+  <div class="auth-card">
+    <div class="brand-mark">C2C</div>
+    <h1>C2C Dispersal Draft</h1>
+    <p class="muted">Sign in or create your league account.</p>
+    <div class="auth-tabs"><button class="tab active" data-auth="signin">Sign In</button><button class="tab" data-auth="register">Create Account</button></div>
+    <form id="signInForm" class="auth-form">
+      <label>Email<input id="signInEmail" type="email" required autocomplete="email"></label>
+      <label>Password<input id="signInPassword" type="password" required autocomplete="current-password"></label>
+      <button class="btn primary full" type="submit">Sign In</button>
+      <button class="link-btn" id="forgotPassword" type="button">Forgot password?</button>
+    </form>
+    <form id="registerForm" class="auth-form hidden">
+      <label>Your name<input id="registerName" required maxlength="40"></label>
+      <label>Email<input id="registerEmail" type="email" required autocomplete="email"></label>
+      <label>Password<input id="registerPassword" type="password" required minlength="6" autocomplete="new-password"></label>
+      <button class="btn primary full" type="submit">Create Account</button>
+      <p class="tiny muted">After registration, the commissioner must assign your account to your draft team.</p>
+    </form>
+    <div id="authMessage" class="message hidden"></div>
+  </div>
+</section>
+
+<section id="pendingScreen" class="screen center-screen hidden">
+  <div class="auth-card">
+    <div class="brand-mark">C2C</div><h1>Account Created</h1>
+    <p>Your account is waiting for commissioner approval.</p>
+    <p class="muted">Tell the commissioner the email address you used. Refresh after they assign your team.</p>
+    <button id="pendingRefresh" class="btn primary full">Refresh My Access</button>
+    <button class="btn full" data-signout>Sign Out</button>
+  </div>
+</section>
+
+<div id="app" class="hidden">
+<header class="topbar">
+  <div class="logo">C2C DISPERSAL DRAFT</div>
+  <div id="draftStatus" class="status-pill">Connecting…</div>
+  <div class="spacer"></div>
+  <div class="user-menu"><span id="signedInAs"></span><button class="btn small" data-signout>Sign Out</button></div>
+</header>
+<main id="boardWrap" class="board-wrap"><div id="board" class="board"></div></main>
+<button id="draftCenterToggle" class="drawer-toggle right-toggle">Draft Center</button>
+<button id="playersToggle" class="drawer-toggle player-toggle">Eligible Players</button>
+
+<aside id="draftCenter" class="drawer right-drawer">
+  <div class="drawer-head"><h2>Draft Center</h2><button class="icon-btn" data-close="draftCenter">×</button></div>
+  <section class="side-section"><div class="eyebrow">Current selection</div><div id="onClock" class="on-clock"></div><div id="pausedNotice" class="warning hidden">Draft is paused</div></section>
+  <section class="side-section">
+    <div class="actions"><button id="proposeTrade" class="btn">Propose Trade</button><button id="viewOffers" class="btn">Offers <span id="offerBadge" class="badge hidden">0</span></button></div>
+    <button id="queueButton" class="btn full">My Draft Queue</button>
+  </section>
+  <section class="side-section"><div class="eyebrow">Latest selection</div><div id="latestPick" class="latest-card"><h3>No picks yet</h3></div></section>
+  <section id="commissionerPanel" class="side-section hidden"><div class="eyebrow">Commissioner controls</div><div class="actions"><button id="pauseDraft" class="btn green">Pause Draft</button><button id="forcePick" class="btn">Force Pick</button><button id="undoPick" class="btn">Undo Pick</button><button id="editPick" class="btn">Edit Pick</button></div><button id="resetDraft" class="btn danger full">Reset Entire Draft</button><button id="manageMembers" class="btn full">Manage Member Accounts</button></section>
+</aside>
+
+<section id="playersDrawer" class="drawer player-drawer">
+  <div class="drawer-head player-head"><h2>Eligible Players</h2><input id="playerSearch" placeholder="Search player, team, school…"><div id="positionFilters" class="filters"></div><button class="icon-btn" data-close="playersDrawer">×</button></div>
+  <div class="player-table-wrap"><table class="player-table"><thead><tr><th>Player</th><th>Level</th><th>Pos</th><th>Team / School</th><th>Class</th><th>Previous Fantasy Pts</th></tr></thead><tbody id="playerRows"></tbody></table></div>
+</section>
+</div>
+
+<div id="modal" class="modal hidden"><div id="modalCard" class="modal-card"></div></div>
+<div id="toast" class="toast"></div>
+<script type="module" src="app.js"></script>
+</body></html>
