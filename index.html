@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#17324d">
   <title>C2C Dispersal Draft</title>
-  <link rel="stylesheet" href="./styles.css?v=222">
+  <link rel="stylesheet" href="./styles.css?v=300">
 </head>
 <body>
   <div id="loadingScreen" class="screen center-screen">
@@ -119,6 +119,68 @@
       </section>
     </main>
 
+
+    <button id="playerRail" class="bottom-rail">Eligible Players <span id="playerCountBadge">0</span></button>
+
+    <section id="playerDrawer" class="player-drawer">
+      <div class="player-drawer-head">
+        <div>
+          <p class="eyebrow">Dispersal player pool</p>
+          <h2>Eligible Players</h2>
+        </div>
+        <button id="closePlayerDrawer" class="icon-btn">×</button>
+      </div>
+
+      <div class="player-toolbar">
+        <input id="playerSearch" type="search" placeholder="Search player, team, or school…" autocomplete="off">
+        <div class="filter-group" id="levelFilters">
+          <button class="filter-btn active" data-level="ALL">All</button>
+          <button class="filter-btn" data-level="NFL">NFL</button>
+          <button class="filter-btn" data-level="NCAA">NCAA</button>
+        </div>
+        <div class="filter-group" id="positionFilters">
+          <button class="filter-btn active" data-position="ALL">All Pos</button>
+          <button class="filter-btn" data-position="QB">QB</button>
+          <button class="filter-btn" data-position="RB">RB</button>
+          <button class="filter-btn" data-position="WR">WR</button>
+          <button class="filter-btn" data-position="TE">TE</button>
+        </div>
+      </div>
+
+      <div class="player-table-wrap">
+        <table class="player-table">
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>Level</th>
+              <th>Pos</th>
+              <th>Team / School</th>
+              <th>Class</th>
+              <th>Previous Season FP</th>
+            </tr>
+          </thead>
+          <tbody id="playerRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <div id="playerModal" class="player-modal hidden">
+      <div class="player-modal-card">
+        <button id="closePlayerModal" class="icon-btn modal-close">×</button>
+        <p class="eyebrow" id="playerModalLevel">Player profile</p>
+        <h2 id="playerModalName"></h2>
+        <p id="playerModalMeta" class="player-modal-meta"></p>
+        <div class="player-stat-grid">
+          <div><span>Position</span><strong id="playerModalPosition"></strong></div>
+          <div><span>Team / School</span><strong id="playerModalTeam"></strong></div>
+          <div><span>Class</span><strong id="playerModalClass"></strong></div>
+          <div class="fp-card"><span>Previous Season Fantasy Points</span><strong id="playerModalFP"></strong></div>
+        </div>
+        <p id="playerModalNote" class="muted"></p>
+        <button class="btn primary full" type="button" disabled>Drafting Opens in Milestone 4</button>
+      </div>
+    </div>
+
     <button id="commissionerRail" class="side-rail hidden">Commissioner</button>
 
     <aside id="commissionerDrawer" class="drawer">
@@ -166,6 +228,6 @@
   </div>
 
   <div id="toast" class="toast"></div>
-  <script type="module" src="./app.js?v=222"></script>
+  <script type="module" src="./app.js?v=300"></script>
 </body>
 </html>
