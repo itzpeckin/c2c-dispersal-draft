@@ -323,3 +323,23 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(62,1
   justify-content:flex-end;
   gap:7px
 }
+
+/* Milestone 6.8 */
+.player-name-line{
+  display:grid!important;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center!important;
+  gap:7px!important
+}
+.player-name-text{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap
+}
+.quick-draft-button.name-column{
+  justify-self:end
+}
+.player-row-actions{
+  justify-content:flex-start!important
+}

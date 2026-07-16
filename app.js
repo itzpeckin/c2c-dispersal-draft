@@ -7,7 +7,7 @@ import {
   getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs,
   serverTimestamp, query, orderBy, onSnapshot, runTransaction, addDoc
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=670";
+import { firebaseConfig } from "./firebase-config.js?v=680";
 
 const TEAM_ACCOUNTS = [
   { team:"YoByronWatkins", email:"byronwatkins@gmail.com", draftPosition:1 },
@@ -515,6 +515,7 @@ function renderPlayerRows(){
         <div class="player-name-line">
           <button class="quick-queue-button ${queued?"queued":""}" type="button" data-quick-queue="${safe(player.id)}" ${isDrafted?"disabled":""} title="${queued?"Remove from Queue":"Add to Queue"}">${queued?"−":"+"}</button>
           <strong class="player-name-text">${safe(player.name)}</strong>
+          ${isDrafted?"":`<button class="quick-draft-button name-column" type="button" data-quick-draft="${safe(player.id)}" ${canQuickDraft?"":"disabled"}>Draft</button>`}
         </div>
         <span>${isDrafted?safe(draftedText):(player.level==="NFL"?`Sleeper roster ${safe(player.source_roster)} • ${safe(player.roster_slot)}`:"Fantrax player pool")}</span>
       </td>
@@ -525,7 +526,6 @@ function renderPlayerRows(){
       <td class="${player.fantasy_points?"fp-value":"fp-pending"}">
         <div class="player-row-actions">
           <span>${isDrafted?`<span class="drafted-label">DRAFTED</span><span class="drafted-label-detail">Pick #${selection.pickIndex+1}</span>`:displayFantasyPoints(player)}</span>
-          ${isDrafted?"":`<button class="quick-draft-button" type="button" data-quick-draft="${safe(player.id)}" ${canQuickDraft?"":"disabled"}>Draft</button>`}
         </div>
       </td>
     </tr>`;
@@ -538,11 +538,29 @@ function renderPlayerRows(){
 
   document.querySelectorAll("[data-quick-queue]").forEach(button=>button.onclick=async event=>{
     event.stopPropagation();
+
     const playerId=button.dataset.quickQueue;
     const wasQueued=queueContains(playerId);
+    const previousItems=[...queueItems];
     const next=wasQueued?queueItems.filter(id=>id!==playerId):[...queueItems,playerId];
-    await saveQueue(next);
+
+    // Optimistic UI update so + / − changes immediately.
+    queueItems=next;
+    renderPlayerRows();
+    renderQueue();
+    updateQueuePlayerButton();
     toast(wasQueued?"Removed from Queue":"Added to Queue");
+
+    try{
+      await saveQueue(next);
+    }catch(error){
+      queueItems=previousItems;
+      renderPlayerRows();
+      renderQueue();
+      updateQueuePlayerButton();
+      toast("Queue update could not be saved");
+      console.error(error);
+    }
   });
 
   document.querySelectorAll("[data-quick-draft]").forEach(button=>button.onclick=async event=>{
