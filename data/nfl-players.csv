@@ -1,0 +1,90 @@
+id,name,level,position,team,school,class_year,fantasy_points,source_roster,roster_slot,fantasy_points_source
+nfl-001,Jared Goff,NFL,QB,DET,,,305.1,10,Starter,FantasyPros 2025 PPR
+nfl-002,Woody Marks,NFL,RB,HOU,,,151.1,10,Starter,FantasyPros 2025 PPR
+nfl-003,Nick Chubb,NFL,RB,Free Agent / No Team Listed,,,88.3,10,Starter,FantasyPros 2025 PPR
+nfl-004,Marquez Valdes-Scantling,NFL,WR,DAL,,,32.0,10,Starter,FantasyPros 2025 PPR
+nfl-005,Amon-Ra St. Brown,NFL,WR,DET,,,324.0,10,Starter,FantasyPros 2025 PPR
+nfl-006,Marvin Mims,NFL,WR,DEN,,,93.0,10,Starter,FantasyPros 2025 PPR
+nfl-007,John Bates,NFL,TE,WAS,,,27.3,10,Starter,FantasyPros 2025 PPR
+nfl-008,Terrance Ferguson,NFL,TE,LAR,,,52.1,10,Starter,FantasyPros 2025 PPR
+nfl-009,Trayveon Williams,NFL,RB,Free Agent / No Team Listed,,,17.1,10,Starter,FantasyPros 2025 PPR
+nfl-010,Zach Charbonnet,NFL,RB,SEA,,,181.4,10,Starter,FantasyPros 2025 PPR
+nfl-011,Trevor Lawrence,NFL,QB,JAX,,,350.1,10,Starter,FantasyPros 2025 PPR
+nfl-012,Jacoby Brissett,NFL,QB,ARI,,,235.4,10,Bench,FantasyPros 2025 PPR
+nfl-013,Michael Penix,NFL,QB,ATL,,,123.2,10,Bench,FantasyPros 2025 PPR
+nfl-014,Bryce Young,NFL,QB,CAR,,,229.0,10,Bench,FantasyPros 2025 PPR
+nfl-015,Jordan Love,NFL,QB,GB,,,241.3,10,Bench,FantasyPros 2025 PPR
+nfl-016,Tyler Goodson,NFL,RB,ATL,,,5.2,10,Bench,FantasyPros 2025 PPR
+nfl-017,Isaac Guerendo,NFL,RB,SF,,,0.0,10,Bench,FantasyPros 2025 PPR
+nfl-018,Pierre Strong,NFL,RB,GB,,,0.0,10,Bench,FantasyPros 2025 PPR
+nfl-019,Beaux Collins,NFL,WR,NYG,,,4.5,10,Bench,FantasyPros 2025 PPR
+nfl-020,Ted Hurst,NFL,WR,TB,,,0.0,10,Bench,FantasyPros 2025 PPR
+nfl-021,Brandon Aiyuk,NFL,WR,SF,,,0.0,10,Bench,FantasyPros 2025 PPR
+nfl-022,Tylan Wallace,NFL,WR,CLE,,,14.5,10,Bench,FantasyPros 2025 PPR
+nfl-023,Tory Horton,NFL,WR,SEA,,,65.1,10,Bench,FantasyPros 2025 PPR
+nfl-024,Malik Heath,NFL,WR,ATL,,,14.6,10,Bench,FantasyPros 2025 PPR
+nfl-025,Cyrus Allen,NFL,WR,KC,,,0.0,10,Bench,FantasyPros 2025 PPR
+nfl-026,Cody White,NFL,WR,SEA,,,18.0,10,Bench,FantasyPros 2025 PPR
+nfl-027,Jaylin Lane,NFL,WR,WAS,,,49.2,10,Bench,FantasyPros 2025 PPR
+nfl-028,Allen Lazard,NFL,WR,Free Agent / No Team Listed,,,23.0,10,Bench,FantasyPros 2025 PPR
+nfl-029,Devontez Walker,NFL,WR,BAL,,,37.6,10,Bench,FantasyPros 2025 PPR
+nfl-030,Anthony Firkser,NFL,TE,WAS,,,13.3,10,Bench,FantasyPros 2025 PPR
+nfl-031,Adam Trautman,NFL,TE,DEN,,,45.5,10,Bench,FantasyPros 2025 PPR
+nfl-032,Ja'Lynn Polk,NFL,WR,NO,,,0.0,10,IR,FantasyPros 2025 PPR
+nfl-033,Kurtis Rourke,NFL,QB,SF,,,0.0,10,IR,FantasyPros 2025 PPR
+nfl-034,Zay Jones,NFL,WR,Free Agent / No Team Listed,,,30.3,10,IR,FantasyPros 2025 PPR
+nfl-035,James Conner,NFL,RB,ARI,,,33.3,10,IR,FantasyPros 2025 PPR
+nfl-036,Patrick Taylor,NFL,RB,SF,,,0.0,10,IR,FantasyPros 2025 PPR
+nfl-037,Kyle Williams,NFL,WR,NE,,,49.2,10,Taxi,FantasyPros 2025 PPR
+nfl-038,KeAndre Lambert-Smith,NFL,WR,LAC,,,16.1,10,Taxi,FantasyPros 2025 PPR
+nfl-039,Cam Miller,NFL,QB,MIA,,,0.0,10,Taxi,FantasyPros 2025 PPR
+nfl-040,Elijhah Badger,NFL,WR,Free Agent / No Team Listed,,,0.0,10,Taxi,FantasyPros 2025 PPR
+nfl-041,Brennan Presley,NFL,WR,LAR,,,0.0,10,Taxi,FantasyPros 2025 PPR
+nfl-042,Jaxson Dart,NFL,QB,NYG,,,246.5,14,Starter,FantasyPros 2025 PPR
+nfl-043,TreVeyon Henderson,NFL,RB,NE,,,206.2,14,Starter,FantasyPros 2025 PPR
+nfl-044,Christian McCaffrey,NFL,RB,SF,,,416.6,14,Starter,FantasyPros 2025 PPR
+nfl-045,Parker Washington,NFL,WR,JAX,,,184.7,14,Starter,FantasyPros 2025 PPR
+nfl-046,Troy Franklin,NFL,WR,DEN,,,177.1,14,Starter,FantasyPros 2025 PPR
+nfl-047,Jameson Williams,NFL,WR,DET,,,219.9,14,Starter,FantasyPros 2025 PPR
+nfl-048,Mike Gesicki,NFL,TE,CIN,,,70.7,14,Starter,FantasyPros 2025 PPR
+nfl-049,Chris Rodriguez,NFL,RB,JAX,,,92.0,14,Starter,FantasyPros 2025 PPR
+nfl-050,Taysom Hill,NFL,TE,Free Agent / No Team Listed,,,41.8,14,Starter,FantasyPros 2025 PPR
+nfl-051,Tyjae Spears,NFL,RB,TEN,,,111.7,14,Starter,FantasyPros 2025 PPR
+nfl-052,Geno Smith,NFL,QB,NYJ,,,190.9,14,Starter,FantasyPros 2025 PPR
+nfl-053,Joey Aguilar,NFL,QB,JAX,,,0.0,14,Bench,FantasyPros 2025 PPR
+nfl-054,Shedeur Sanders,NFL,QB,CLE,,,95.0,14,Bench,FantasyPros 2025 PPR
+nfl-055,Tua Tagovailoa,NFL,QB,ATL,,,175.6,14,Bench,FantasyPros 2025 PPR
+nfl-056,Andy Dalton,NFL,QB,PHI,,,10.5,14,Bench,FantasyPros 2025 PPR
+nfl-057,Alvin Kamara,NFL,RB,NO,,,100.7,14,Bench,FantasyPros 2025 PPR
+nfl-058,Roschon Johnson,NFL,RB,CHI,,,1.7,14,Bench,FantasyPros 2025 PPR
+nfl-059,Jordan James,NFL,RB,SF,,,0.0,14,Bench,FantasyPros 2025 PPR
+nfl-060,Ty Chandler,NFL,RB,NO,,,8.8,14,Bench,FantasyPros 2025 PPR
+nfl-061,Zavier Scott,NFL,RB,MIN,,,39.2,14,Bench,FantasyPros 2025 PPR
+nfl-062,Chris Brooks,NFL,RB,GB,,,32.7,14,Bench,FantasyPros 2025 PPR
+nfl-063,Tez Johnson,NFL,WR,TB,,,92.6,14,Bench,FantasyPros 2025 PPR
+nfl-064,Mitch Tinsley,NFL,WR,CIN,,,31.6,14,Bench,FantasyPros 2025 PPR
+nfl-065,Tyrell Shavers,NFL,WR,BUF,,,45.5,14,Bench,FantasyPros 2025 PPR
+nfl-066,Rashod Bateman,NFL,WR,BAL,,,55.4,14,Bench,FantasyPros 2025 PPR
+nfl-067,Omar Cooper,NFL,WR,NYJ,,,0.0,14,Bench,FantasyPros 2025 PPR
+nfl-068,Jaylin Noel,NFL,WR,HOU,,,68.4,14,Bench,FantasyPros 2025 PPR
+nfl-069,Dont'e Thornton,NFL,WR,LV,,,23.5,14,Bench,FantasyPros 2025 PPR
+nfl-070,Josh Cameron,NFL,WR,JAX,,,0.0,14,Bench,FantasyPros 2025 PPR
+nfl-071,Jalen McMillan,NFL,WR,TB,,,29.9,14,Bench,FantasyPros 2025 PPR
+nfl-072,Demarcus Robinson,NFL,WR,SF,,,58.2,14,Bench,FantasyPros 2025 PPR
+nfl-073,Jonathon Brooks,NFL,RB,CAR,,,0.0,14,IR,FantasyPros 2025 PPR
+nfl-074,Tyler Higbee,NFL,TE,LAR,,,71.1,14,IR,FantasyPros 2025 PPR
+nfl-075,Joe Milton,NFL,QB,DAL,,,12.2,14,Taxi,FantasyPros 2025 PPR
+nfl-076,Spencer Rattler,NFL,QB,NO,,,104.1,14,Taxi,FantasyPros 2025 PPR
+nfl-077,Isaiah Davis,NFL,RB,NYJ,,,71.2,14,Taxi,FantasyPros 2025 PPR
+nfl-078,Frank Gore,NFL,RB,BUF,,,0.0,14,Taxi,FantasyPros 2025 PPR
+nfl-079,Isaiah Williams,NFL,WR,NYJ,,,58.7,14,Taxi,FantasyPros 2025 PPR
+nfl-080,Keilan Robinson,NFL,RB,Free Agent / No Team Listed,,,0.0,14,Taxi,FantasyPros 2025 PPR
+nfl-081,Casey Washington,NFL,WR,Free Agent / No Team Listed,,,15.4,14,Taxi,FantasyPros 2025 PPR
+nfl-082,Tahj Washington,NFL,WR,MIA,,,4.7,14,Taxi,FantasyPros 2025 PPR
+nfl-083,Donovan Edwards,NFL,RB,MIA,,,0.0,14,Taxi,FantasyPros 2025 PPR
+nfl-084,Elijah Arroyo,NFL,TE,SEA,,,36.9,14,Taxi,FantasyPros 2025 PPR
+nfl-085,Jimmy Horn,NFL,WR,CAR,,,28.7,14,Taxi,FantasyPros 2025 PPR
+nfl-086,Rivaldo Fairweather,NFL,TE,ARI,,,0.0,14,Taxi,FantasyPros 2025 PPR
+nfl-087,Taylor Morin,NFL,WR,Free Agent / No Team Listed,,,0.0,14,Taxi,FantasyPros 2025 PPR
+nfl-088,Darius Cooper,NFL,WR,PHI,,,18.2,14,Taxi,FantasyPros 2025 PPR
+nfl-089,Jimmy Holiday,NFL,WR,KC,,,0.0,14,Taxi,FantasyPros 2025 PPR
