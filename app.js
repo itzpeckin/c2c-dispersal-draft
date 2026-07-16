@@ -7,7 +7,7 @@ import {
   getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs,
   serverTimestamp, query, orderBy, onSnapshot, runTransaction, addDoc
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=620";
+import { firebaseConfig } from "./firebase-config.js?v=640";
 
 const TEAM_ACCOUNTS = [
   { team:"YoByronWatkins", email:"byronwatkins@gmail.com", draftPosition:1 },
@@ -103,7 +103,7 @@ $("assumeIdentitySelect").onchange=()=>{
   assumedTeam=$("assumeIdentitySelect").value||null;
   const notice=$("assumedIdentityNotice");
   if(assumedTeam){
-    notice.textContent=`Testing as ${assumedTeam}.`;
+    notice.textContent=`Testing as ${assumedTeam}. You can draft only when ${assumedTeam} is on the clock.`;
     notice.classList.remove("hidden");
   }else{
     notice.textContent="";
@@ -528,6 +528,16 @@ function updateDrawerBackdrop(){
     document.body.appendChild(backdrop);
     backdrop.addEventListener("click",event=>{
       if(event.target!==backdrop)return;
+
+      const playerCardOpen=!$("playerModal").classList.contains("hidden");
+      const queueCardOpen=$("queueModal")&&!$("queueModal").classList.contains("hidden");
+
+      // Clicking the covered draft-board/background closes Eligible Players,
+      // except while the Player Card or Queue Card is actively open.
+      if($("playerDrawer").classList.contains("open")&&!playerCardOpen&&!queueCardOpen){
+        closePlayerDrawer();
+      }
+
       closeCommissionerDrawer();
       $("tradeDrawer").classList.remove("open");
       updateDrawerBackdrop();
@@ -657,7 +667,18 @@ function currentPickOwner(){
   return liveDraftState.currentOwner||currentOwnerForPick(liveDraftState.currentPick);
 }
 function normalDraftAllowed(){
-  return currentProfile&&liveDraftState?.initialized&&liveDraftState.status==="running"&&liveDraftState.currentPick<TOTAL_PICKS&&(currentProfile.role==="commissioner"||actingTeam()===currentPickOwner());
+  if(!currentProfile||!liveDraftState?.initialized||liveDraftState.status!=="running"||liveDraftState.currentPick>=TOTAL_PICKS)return false;
+
+  // During commissioner identity testing, the assumed team has exactly the
+  // same drafting permission as that real team—no commissioner override.
+  if(currentProfile.role==="commissioner"&&assumedTeam){
+    return assumedTeam===currentPickOwner();
+  }
+
+  // With no assumed identity, Peckin retains normal commissioner override.
+  if(currentProfile.role==="commissioner")return true;
+
+  return currentProfile.team===currentPickOwner();
 }
 function updatePlayerDraftButton(){
   if(!$("draftPlayerButton"))return;
@@ -977,18 +998,30 @@ document.querySelectorAll("[data-sort]").forEach(button=>{
   });
 });
 
-// Drawers close only when the user returns to the draft-board area.
+// Close drawers when clicking outside them.
+// Player Card and Queue Card interactions intentionally keep Eligible Players open.
 document.addEventListener("click",event=>{
-  const clickedDraftBoard=Boolean(event.target.closest(".draft-shell")||event.target.closest(".board-scroll"));
-  if(!clickedDraftBoard)return;
+  const playerOpen=$("playerDrawer").classList.contains("open");
+  const commissionerOpen=$("commissionerDrawer").classList.contains("open");
+  const tradeOpen=$("tradeDrawer").classList.contains("open");
 
-  if($("playerDrawer").classList.contains("open"))closePlayerDrawer();
-  if($("commissionerDrawer").classList.contains("open"))closeCommissionerDrawer();
-  if($("tradeDrawer").classList.contains("open")){
+  const insidePlayerDrawer=Boolean(event.target.closest("#playerDrawer")||event.target.closest("#playerRail"));
+  const insidePlayerCard=Boolean(event.target.closest("#playerModal"));
+  const insideQueueCard=Boolean(event.target.closest("#queueModal"));
+  const insideCommissioner=Boolean(event.target.closest("#commissionerDrawer")||event.target.closest("#commissionerRail")||event.target.closest("#commissionerToggle"));
+  const insideTrade=Boolean(event.target.closest("#tradeDrawer")||event.target.closest("#tradeRail")||event.target.closest("#tradeDetailModal"));
+
+  if(playerOpen&&!insidePlayerDrawer&&!insidePlayerCard&&!insideQueueCard){
+    closePlayerDrawer();
+  }
+  if(commissionerOpen&&!insideCommissioner){
+    closeCommissionerDrawer();
+  }
+  if(tradeOpen&&!insideTrade){
     $("tradeDrawer").classList.remove("open");
     updateDrawerBackdrop();
   }
-});
+},true);
 
 
 $("advancePick").textContent="Force Pick";$("previousPick").textContent="Undo Last Pick";
