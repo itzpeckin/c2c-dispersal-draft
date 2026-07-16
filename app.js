@@ -7,7 +7,7 @@ import {
   getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs,
   serverTimestamp, query, orderBy, onSnapshot
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=202";
+import { firebaseConfig } from "./firebase-config.js?v=211";
 
 const TEAM_ACCOUNTS = [
   { team:"YoByronWatkins", email:"byronwatkins@gmail.com", draftPosition:1 },
@@ -154,23 +154,57 @@ function subscribeToDraft(){
     setMessage("draftControlMessage",friendlyError(error),"error");
   });
 }
+function currentOwnerForPick(index){
+  const storedOwners=liveDraftState?.pickOwners;
+  if(Array.isArray(storedOwners) && storedOwners[index]) return storedOwners[index];
+  return ownerForOverallPick(index);
+}
+function tradeDetailForPick(index){
+  const details=liveDraftState?.tradeDetails;
+  if(!details) return null;
+  return Array.isArray(details) ? details[index] : details[String(index)] || null;
+}
+function openTradeDetail(index){
+  const detail=tradeDetailForPick(index);
+  if(!detail) return;
+  const sent=(detail.sent || []).join(", ") || "No draft assets";
+  const received=(detail.received || []).join(", ") || "No draft assets";
+  alert(`Trade details for Pick #${index+1}\n\n${detail.fromTeam || "Original owner"} sent:\n${sent}\n\n${detail.toTeam || "New owner"} sent:\n${received}`);
+}
+window.openC2CTradeDetail=openTradeDetail;
+
 function renderBoard(){
   const html=[];
+  const currentColumn=liveDraftState?.initialized&&liveDraftState.currentPick<TOTAL_PICKS
+    ? columnForOverallPick(liveDraftState.currentPick):null;
+
   for(let col=0;col<12;col++){
-    const currentColumn=liveDraftState?.initialized&&liveDraftState.currentPick<TOTAL_PICKS
-      ? columnForOverallPick(liveDraftState.currentPick):null;
-    html.push(`<div class="owner-header ${currentColumn===col?"on-clock":""}">${BASE_ORDER[col]}</div>`);
+    html.push(`<div class="owner-header ${currentColumn===col?"on-clock":""}" style="grid-column:${col+1};grid-row:1">
+      ${BASE_ORDER[col]}
+    </div>`);
   }
+
   for(let round=0;round<6;round++){
     for(let col=0;col<12;col++){
-      const index=overallIndexForCell(round,col),rp=roundPick(index);
+      const index=overallIndexForCell(round,col);
       const status=!liveDraftState?.initialized?"Waiting":
         index<liveDraftState.currentPick?"Passed":
         index===liveDraftState.currentPick?"On the clock":"Upcoming";
-      html.push(`<div class="pick-tile ${index===liveDraftState?.currentPick?"current":""} ${index<(liveDraftState?.currentPick??0)?"past":""}">
-        <div class="pick-label">Pick #${index+1}</div>
-        <div class="pick-owner">${ownerForOverallPick(index)}</div>
-        <div class="pick-state">Round ${rp.round}, Pick ${rp.pick} • ${status}</div>
+      const originalOwner=ownerForOverallPick(index);
+      const currentOwner=currentOwnerForPick(index);
+      const traded=currentOwner!==originalOwner;
+      const detail=tradeDetailForPick(index);
+
+      html.push(`<div class="pick-tile ${index===liveDraftState?.currentPick?"current":""} ${index<(liveDraftState?.currentPick??0)?"past":""} ${traded?"traded":""}"
+        style="grid-column:${col+1};grid-row:${round+2}">
+        <div class="pick-topline">
+          <div class="pick-label">Pick #${index+1}</div>
+          ${traded?`<div class="traded-to">To: ${safe(currentOwner)}</div>`:""}
+        </div>
+        <div class="empty-pick">${status}</div>
+        ${traded?`<button class="trade-detail-footer" type="button" ${detail?`onclick="openC2CTradeDetail(${index})"`:"disabled"}>
+          ${detail?"View trade details":"Trade details will appear here"}
+        </button>`:""}
       </div>`);
     }
   }
