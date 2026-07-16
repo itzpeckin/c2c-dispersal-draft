@@ -7,7 +7,7 @@ import {
   getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs,
   serverTimestamp, query, orderBy, onSnapshot
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=222";
+import { firebaseConfig } from "./firebase-config.js?v=300";
 
 const TEAM_ACCOUNTS = [
   { team:"YoByronWatkins", email:"byronwatkins@gmail.com", draftPosition:1 },
@@ -36,6 +36,9 @@ const screens=["loadingScreen","authScreen","pendingScreen","rejectedScreen","ap
 let currentProfile=null;
 let liveDraftState=null;
 let unsubscribeDraft=null;
+let players=[];
+let playerLevelFilter="ALL";
+let playerPositionFilter="ALL";
 
 function normalizeEmail(v){return String(v||"").trim().toLowerCase()}
 function accountForEmail(email){return TEAM_ACCOUNTS.find(x=>x.email===normalizeEmail(email))}
@@ -136,6 +139,7 @@ async function loadCurrentUser(user,manual=false){
     showOnly("app");
     renderBoard();
     subscribeToDraft();
+    if(!players.length) await loadPlayers();
     if(commissioner)await loadMemberDashboard();
   }catch(error){showOnly("authScreen");setMessage("authMessage",friendlyError(error),"error")}
 }
@@ -305,5 +309,111 @@ async function approveUser(uid){
 }
 async function rejectUser(uid){const reason=prompt("Reason for rejection:","Email or team selection needs correction.");if(reason===null)return;await updateDoc(doc(db,"users",uid),{status:"rejected",rejectionReason:reason,approvedBy:auth.currentUser.uid});loadMemberDashboard()}
 async function revokeUser(uid){if(!confirm("Return this account to Pending?"))return;await updateDoc(doc(db,"users",uid),{status:"pending",team:null,draftPosition:null,approvedAt:null,approvedBy:auth.currentUser.uid});loadMemberDashboard()}
+
+
+function parseCsv(text){
+  const rows=[];let row=[],cell="",quoted=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i],next=text[i+1];
+    if(ch==='"'&&quoted&&next==='"'){cell+='"';i++}
+    else if(ch==='"'){quoted=!quoted}
+    else if(ch===','&&!quoted){row.push(cell);cell=""}
+    else if((ch==='\n'||ch==='\r')&&!quoted){
+      if(ch==='\r'&&next==='\n')i++;
+      row.push(cell);cell="";
+      if(row.some(value=>value!==""))rows.push(row);
+      row=[];
+    }else cell+=ch;
+  }
+  if(cell!==""||row.length){row.push(cell);rows.push(row)}
+  if(!rows.length)return[];
+  const headers=rows.shift().map(x=>x.trim());
+  return rows.map(values=>Object.fromEntries(headers.map((h,i)=>[h,(values[i]??"").trim()])));
+}
+async function fetchCsv(path){
+  const response=await fetch(path,{cache:"no-store"});
+  if(!response.ok)throw new Error(`Could not load ${path}`);
+  return parseCsv(await response.text());
+}
+async function loadPlayers(){
+  try{
+    const [nfl,ncaa]=await Promise.all([
+      fetchCsv("./data/nfl-players.csv?v=300"),
+      fetchCsv("./data/ncaa-players.csv?v=300")
+    ]);
+    players=[...nfl,...ncaa].filter(p=>p.name).sort((a,b)=>a.name.localeCompare(b.name));
+    $("playerCountBadge").textContent=players.length;
+    renderPlayerRows();
+  }catch(error){
+    console.error(error);
+    $("playerRows").innerHTML=`<tr><td colspan="6">Could not load the player CSV files.</td></tr>`;
+    toast("Player pool could not be loaded");
+  }
+}
+function filteredPlayers(){
+  const term=$("playerSearch").value.trim().toLowerCase();
+  return players.filter(player=>{
+    const levelOk=playerLevelFilter==="ALL"||player.level===playerLevelFilter;
+    const positionOk=playerPositionFilter==="ALL"||player.position===playerPositionFilter;
+    const haystack=`${player.name} ${player.team} ${player.school} ${player.position} ${player.level}`.toLowerCase();
+    return levelOk&&positionOk&&(!term||haystack.includes(term));
+  });
+}
+function displayFantasyPoints(player){
+  const value=String(player.fantasy_points||"").trim();
+  return value?`${Number(value).toFixed(1)}`:"Pending";
+}
+function renderPlayerRows(){
+  if(!$("playerRows"))return;
+  const list=filteredPlayers();
+  $("playerCountBadge").textContent=list.length;
+  $("playerRows").innerHTML=list.length?list.map(player=>`
+    <tr data-player-id="${safe(player.id)}">
+      <td class="player-name-cell"><strong>${safe(player.name)}</strong><span>${player.level==="NFL"?`Sleeper roster ${safe(player.source_roster)} • ${safe(player.roster_slot)}`:"Fantrax player pool"}</span></td>
+      <td><span class="level-pill ${player.level.toLowerCase()}">${safe(player.level)}</span></td>
+      <td><span class="position-pill">${safe(player.position)}</span></td>
+      <td>${safe(player.team||player.school||"—")}</td>
+      <td>${safe(player.class_year||"—")}</td>
+      <td class="${player.fantasy_points?"fp-value":"fp-pending"}">${displayFantasyPoints(player)}</td>
+    </tr>`).join(""):`<tr><td colspan="6">No players match the selected filters.</td></tr>`;
+  document.querySelectorAll("#playerRows tr[data-player-id]").forEach(row=>{
+    row.onclick=()=>openPlayerProfile(row.dataset.playerId);
+  });
+}
+function openPlayerProfile(id){
+  const player=players.find(x=>x.id===id);
+  if(!player)return;
+  $("playerModalLevel").textContent=`${player.level} player profile`;
+  $("playerModalName").textContent=player.name;
+  $("playerModalMeta").textContent=player.level==="NFL"
+    ? `${player.position} • ${player.team}`
+    : `${player.position} • ${player.team} • ${player.class_year||"Class not listed"}`;
+  $("playerModalPosition").textContent=player.position||"—";
+  $("playerModalTeam").textContent=player.team||player.school||"—";
+  $("playerModalClass").textContent=player.class_year||"Not listed";
+  $("playerModalFP").textContent=displayFantasyPoints(player);
+  $("playerModalNote").textContent=player.level==="NFL"
+    ?"2025 PPR fantasy-point total from FantasyPros. This may differ from your Sleeper league because of custom scoring settings."
+    :"Fantasy-point total supplied by the Fantrax roster export.";
+  $("playerModal").classList.remove("hidden");
+}
+function closePlayerProfile(){$("playerModal").classList.add("hidden")}
+
+$("playerRail").onclick=()=>{$("playerDrawer").classList.add("open");renderPlayerRows()};
+$("closePlayerDrawer").onclick=()=>$("playerDrawer").classList.remove("open");
+$("closePlayerModal").onclick=closePlayerProfile;
+$("playerModal").onclick=event=>{if(event.target===$("playerModal"))closePlayerProfile()};
+$("playerSearch").oninput=renderPlayerRows;
+document.querySelectorAll("[data-level]").forEach(button=>button.onclick=()=>{
+  playerLevelFilter=button.dataset.level;
+  document.querySelectorAll("[data-level]").forEach(x=>x.classList.toggle("active",x===button));
+  renderPlayerRows();
+});
+document.querySelectorAll("[data-position]").forEach(button=>button.onclick=()=>{
+  playerPositionFilter=button.dataset.position;
+  document.querySelectorAll("[data-position]").forEach(x=>x.classList.toggle("active",x===button));
+  renderPlayerRows();
+});
+
 
 onAuthStateChanged(auth,user=>user?loadCurrentUser(user):loadCurrentUser(null));
