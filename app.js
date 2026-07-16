@@ -1,67 +1,326 @@
-import { firebaseConfig } from './firebase-config.js';
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js';
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js';
-import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, getDocs, onSnapshot, writeBatch, runTransaction, serverTimestamp, addDoc } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js';
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
+import {
+  getAuth, onAuthStateChanged, createUserWithEmailAndPassword,
+  signInWithEmailAndPassword, signOut, sendPasswordResetEmail
+} from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+import {
+  getFirestore, doc, getDoc, setDoc, updateDoc, collection,
+  getDocs, serverTimestamp, query, orderBy
+} from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+import { firebaseConfig } from "./firebase-config.js?v=101";
 
-const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
-const $=id=>document.getElementById(id);
-const ORDER=['YoByronWatkins','Erics','BenMoore13','Vandorjp','LouGarou','BKnappy','TSummers3','Peckin','JonredCorn08','Jimmer44','Pirates','Calbrewski'];
-let profile=null,config=null,picks=[],players=[],offers=[],queueIds=[],activePlayer=null,selectionTarget=null,position='ALL',unsubs=[];
-const originalOwners=Array.from({length:72},(_,i)=>{const r=Math.floor(i/12),slot=i%12;return r%2===0?ORDER[slot]:ORDER[11-slot]});
+const TEAM_ACCOUNTS = [
+  { team:"YoByronWatkins", email:"byronwatkins@gmail.com", draftPosition:1 },
+  { team:"erics2423", email:"erics2423@yahoo.com", draftPosition:2 },
+  { team:"BenMoore13", email:"biggtyme13@gmail.com", draftPosition:3 },
+  { team:"Vandorjp", email:"joevandorn@gmail.com", draftPosition:4 },
+  { team:"LouGarou", email:"nate.hagemann@gmail.com", draftPosition:5 },
+  { team:"BKnappy", email:"bronsonknapp13@gmail.com", draftPosition:6 },
+  { team:"Tsummers3", email:"trey.summers3@gmail.com", draftPosition:7 },
+  { team:"Peckin", email:"justinrmandaro@gmail.com", draftPosition:8, commissioner:true },
+  { team:"Jonredcorn08", email:"jstyner0425@email.campbell.edu", draftPosition:9 },
+  { team:"Jimmer44", email:"jmiakisz@gmail.com", draftPosition:10 },
+  { team:"PiratesJs", email:"bjcurrie12@gmail.com", draftPosition:11 },
+  { team:"CalBrewski", email:"caleb.ds.lucas@gmail.com", draftPosition:12 }
+];
 
-function show(id){['loadingScreen','authScreen','pendingScreen','app'].forEach(x=>$(x).classList.add('hidden'));$(id).classList.remove('hidden')}
-function toast(msg){$('toast').textContent=msg;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),2200)}
-function modal(html){$('modalCard').innerHTML=html;$('modal').classList.remove('hidden')}
-function closeModal(){$('modal').classList.add('hidden');activePlayer=null;selectionTarget=null}
-window.closeC2CModal=closeModal;
-function escapeHtml(v=''){return String(v).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
-function roundPick(i){return `Round ${Math.floor(i/12)+1} Pick ${(i%12)+1}`}
-function ownerAt(i){return picks[i]?.ownerTeam||originalOwners[i]}
-function isCommish(){return profile?.role==='commissioner'}
-function isAssigned(){return profile?.approved&&profile?.teamName}
-function canDraft(i){return !config?.paused&&(isCommish()||profile?.teamName===ownerAt(i))}
-function assetLabel(i){const p=picks[i];const player=p?.playerId?players.find(x=>x.id===p.playerId):null;return `${roundPick(i)}${player?` — ${player.name}`:''}`}
+const COMMISSIONER_EMAIL = "justinrmandaro@gmail.com";
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-async function csv(path){const text=await fetch(path).then(r=>{if(!r.ok)throw new Error(`Could not load ${path}`);return r.text()});const rows=[];let row=[],cell='',q=false;for(let i=0;i<text.length;i++){const c=text[i],n=text[i+1];if(c==='"'&&q&&n==='"'){cell+='"';i++}else if(c==='"'){q=!q}else if(c===','&&!q){row.push(cell);cell=''}else if((c==='\n'||c==='\r')&&!q){if(c==='\r'&&n==='\n')i++;row.push(cell);if(row.some(x=>x!==''))rows.push(row);row=[];cell=''}else cell+=c}if(cell||row.length){row.push(cell);rows.push(row)}const h=rows.shift();return rows.map(r=>Object.fromEntries(h.map((x,i)=>[x,r[i]??''])))}
-async function loadPlayers(){const [nfl,ncaa]=await Promise.all([csv('./data/nfl-players.csv'),csv('./data/ncaa-players.csv')]);players=[...nfl,...ncaa].map(p=>({...p,fantasyPoints:p.fantasyPoints===''?null:Number(p.fantasyPoints)})).sort((a,b)=>(b.fantasyPoints??-1)-(a.fantasyPoints??-1)||a.name.localeCompare(b.name))}
+const $ = id => document.getElementById(id);
+const screens = ["loadingScreen","authScreen","pendingScreen","rejectedScreen","app"];
 
-function authMessage(msg){$('authMessage').textContent=msg;$('authMessage').classList.remove('hidden')}
-document.querySelectorAll('[data-auth]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-auth]').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('signInForm').classList.toggle('hidden',b.dataset.auth!=='signin');$('registerForm').classList.toggle('hidden',b.dataset.auth!=='register');$('authMessage').classList.add('hidden')});
-$('signInForm').onsubmit=async e=>{e.preventDefault();try{await signInWithEmailAndPassword(auth,$('signInEmail').value.trim(),$('signInPassword').value)}catch(err){authMessage(err.message)}};
-$('registerForm').onsubmit=async e=>{e.preventDefault();try{const cred=await createUserWithEmailAndPassword(auth,$('registerEmail').value.trim(),$('registerPassword').value);await setDoc(doc(db,'users',cred.user.uid),{email:cred.user.email,requestedName:$('registerName').value.trim(),teamName:null,role:'member',approved:false,createdAt:serverTimestamp()})}catch(err){authMessage(err.message)}};
-$('forgotPassword').onclick=async()=>{const email=$('signInEmail').value.trim();if(!email)return authMessage('Enter your email first.');try{await sendPasswordResetEmail(auth,email);authMessage('Password reset email sent.')}catch(err){authMessage(err.message)}};
-document.querySelectorAll('[data-signout]').forEach(b=>b.onclick=()=>signOut(auth));$('pendingRefresh').onclick=()=>location.reload();
+function showOnly(id){
+  screens.forEach(screenId => $(screenId).classList.toggle("hidden", screenId !== id));
+}
+function normalizeEmail(value){ return String(value || "").trim().toLowerCase(); }
+function accountForEmail(email){ return TEAM_ACCOUNTS.find(x => x.email === normalizeEmail(email)); }
+function accountForTeam(team){ return TEAM_ACCOUNTS.find(x => x.team === team); }
 
-onAuthStateChanged(auth,async user=>{unsubs.forEach(u=>u());unsubs=[];if(!user){profile=null;show('authScreen');return}const snap=await getDoc(doc(db,'users',user.uid));if(!snap.exists()){await setDoc(doc(db,'users',user.uid),{email:user.email,requestedName:user.email,teamName:null,role:'member',approved:false,createdAt:serverTimestamp()});show('pendingScreen');return}profile={uid:user.uid,...snap.data()};if(!isAssigned()&&!isCommish()){show('pendingScreen');return}await startApp()});
+function setMessage(id, text="", type=""){
+  const el=$(id);
+  el.textContent=text;
+  el.className=`message ${type}`.trim();
+  el.classList.toggle("hidden", !text);
+}
+function friendlyError(error){
+  const code=error?.code || "";
+  const messages={
+    "auth/email-already-in-use":"An account already exists for this email. Use Sign In instead.",
+    "auth/invalid-credential":"The email or password is incorrect.",
+    "auth/invalid-email":"Enter a valid email address.",
+    "auth/weak-password":"Your password must contain at least six characters.",
+    "auth/too-many-requests":"Too many attempts were made. Wait a few minutes and try again.",
+    "permission-denied":"Firebase blocked this action. Confirm the Firestore rules were published."
+  };
+  return messages[code] || error?.message || "Something went wrong. Please try again.";
+}
+function toast(text){
+  $("toast").textContent=text;
+  $("toast").classList.add("show");
+  window.setTimeout(()=>$("toast").classList.remove("show"),2200);
+}
 
-async function startApp(){show('app');$('signedInAs').textContent=`${profile.teamName||profile.requestedName}${isCommish()?' • Commissioner':''}`;$('commissionerPanel').classList.toggle('hidden',!isCommish());await loadPlayers();subscribe();}
-function subscribe(){unsubs.push(onSnapshot(doc(db,'draft','config'),s=>{config=s.exists()?s.data():null;if(!config&&isCommish())showInitialize();render()}));unsubs.push(onSnapshot(collection(db,'picks'),s=>{picks=Array(72).fill(null);s.forEach(d=>{const p=d.data();picks[p.overall-1]={id:d.id,...p}});render()}));unsubs.push(onSnapshot(query(collection(db,'offers'),where('participants','array-contains',profile.teamName)),s=>{offers=s.docs.map(d=>({id:d.id,...d.data()}));renderOffersBadge()}));unsubs.push(onSnapshot(doc(db,'queues',profile.uid),s=>{queueIds=s.exists()?s.data().playerIds||[]:[]}));}
-function showInitialize(){modal(`<div class="eyebrow">First-time setup</div><h2>Initialize the Draft</h2><p>This creates the fixed 72-pick snake board. Run this once.</p><div class="modal-actions"><button class="btn primary" id="initDraft">Initialize Draft</button></div>`);$('initDraft').onclick=initializeDraft}
-async function initializeDraft(){const batch=writeBatch(db);batch.set(doc(db,'draft','config'),{currentPick:1,paused:false,initialized:true,updatedAt:serverTimestamp()});for(let i=0;i<72;i++)batch.set(doc(db,'picks',String(i+1).padStart(2,'0')),{overall:i+1,round:Math.floor(i/12)+1,roundPick:(i%12)+1,originalOwner:originalOwners[i],ownerTeam:originalOwners[i],playerId:null,tradeHistory:[]});await batch.commit();closeModal();toast('Draft initialized')}
+function populateTeams(){
+  $("registerTeam").innerHTML = `<option value="">Choose your assigned team</option>` +
+    TEAM_ACCOUNTS.map(x=>`<option value="${x.team}">${x.team}</option>`).join("");
+}
+populateTeams();
 
-function cellIndex(r,c){return r%2===0?r*12+c:r*12+(11-c)}
-function render(){if(!profile)return;const current=(config?.currentPick||1)-1,html=[];for(let c=0;c<12;c++)html.push(`<div class="owner-header ${ownerAt(current)===ORDER[c]?'onclock':''}"><b>${ORDER[c]}</b></div>`);for(let r=0;r<6;r++)for(let c=0;c<12;c++){const i=cellIndex(r,c),p=picks[i],pl=p?.playerId?players.find(x=>x.id===p.playerId):null,traded=(p?.tradeHistory||[]).length>0;html.push(`<div class="pick ${i===current?'current':''} ${ownerAt(i)===profile.teamName?'mine':''}"><div class="pick-top"><div class="pick-number">Pick #${i+1}</div>${traded?`<div class="traded-to">To ${escapeHtml(ownerAt(i))}</div>`:''}</div>${pl?`<div class="player-name">${escapeHtml(pl.name)}</div><div class="player-meta">${pl.position} • ${escapeHtml(pl.team)} • ${pl.level}</div>`:`<div class="empty">Available</div>`}${traded?`<div class="trade-label" data-history="${i}">TRADED PICK • VIEW DETAILS</div>`:''}</div>`)}$('board').innerHTML=html.join('');document.querySelectorAll('[data-history]').forEach(x=>x.onclick=()=>showTradeHistory(Number(x.dataset.history)));$('onClock').textContent=config?`${ownerAt(current)} — Pick #${current+1}`:'Not initialized';$('pausedNotice').classList.toggle('hidden',!config?.paused);$('draftStatus').textContent=!config?'Setup needed':config.paused?'Draft paused':`Pick #${config.currentPick}`;$('pauseDraft').textContent=config?.paused?'Resume Draft':'Pause Draft';renderLatest();renderPlayerRows()}
-function renderLatest(){const chosen=picks.filter(p=>p?.playerId).sort((a,b)=>b.overall-a.overall)[0];if(!chosen){$('latestPick').innerHTML='<h3>No picks yet</h3>';return}const pl=players.find(x=>x.id===chosen.playerId);$('latestPick').innerHTML=`<h3>${escapeHtml(pl?.name||'Unknown')}</h3><p><b>Pick #${chosen.overall}</b> by ${escapeHtml(chosen.ownerTeam)}<br>${pl?.position||''} • ${escapeHtml(pl?.team||'')}</p>`}
+document.querySelectorAll("[data-auth-tab]").forEach(button=>{
+  button.addEventListener("click",()=>{
+    document.querySelectorAll("[data-auth-tab]").forEach(x=>x.classList.toggle("active",x===button));
+    const register=button.dataset.authTab==="register";
+    $("registerForm").classList.toggle("hidden",!register);
+    $("signInForm").classList.toggle("hidden",register);
+    setMessage("authMessage");
+  });
+});
 
-const positions=['ALL','QB','RB','WR','TE'];$('positionFilters').innerHTML=positions.map(p=>`<button class="filter ${p==='ALL'?'active':''}" data-pos="${p}">${p}</button>`).join('');document.querySelectorAll('[data-pos]').forEach(b=>b.onclick=()=>{position=b.dataset.pos;document.querySelectorAll('[data-pos]').forEach(x=>x.classList.toggle('active',x===b));renderPlayerRows()});$('playerSearch').oninput=renderPlayerRows;
-function renderPlayerRows(){if(!$('playerRows')||!players.length)return;const q=$('playerSearch').value.toLowerCase(),drafted=new Set(picks.filter(Boolean).map(x=>x.playerId).filter(Boolean));const list=players.filter(p=>(position==='ALL'||p.position===position)&&(`${p.name} ${p.team} ${p.level}`.toLowerCase().includes(q)));$('playerRows').innerHTML=list.map(p=>`<tr class="${drafted.has(p.id)?'drafted':''}" data-player="${p.id}"><td><b>${escapeHtml(p.name)}</b></td><td>${p.level}</td><td><span class="pos-pill">${p.position}</span></td><td>${escapeHtml(p.team)}</td><td>${escapeHtml(p.classYear||'—')}</td><td class="fp">${p.fantasyPoints==null?'Pending':p.fantasyPoints.toFixed(2)}</td></tr>`).join('');document.querySelectorAll('[data-player]').forEach(x=>x.onclick=()=>showPlayer(x.dataset.player))}
-function showPlayer(id){activePlayer=players.find(x=>x.id===id);const current=selectionTarget??((config?.currentPick||1)-1);modal(`<div class="eyebrow">Player preview</div><h2>${escapeHtml(activePlayer.name)}</h2><p class="muted">${activePlayer.position} • ${escapeHtml(activePlayer.team)} • ${activePlayer.level}</p><div class="detail-grid"><div class="detail-box"><span>Position</span><b>${activePlayer.position}</b></div><div class="detail-box"><span>Class</span><b>${escapeHtml(activePlayer.classYear||'Not listed')}</b></div><div class="detail-box"><span>Previous Fantasy Pts</span><b>${activePlayer.fantasyPoints==null?'Pending':activePlayer.fantasyPoints.toFixed(2)}</b></div></div><div class="modal-actions"><button class="btn" id="addQueue">Add to Queue</button><button class="btn" onclick="closeC2CModal()">Close</button><button class="btn primary" id="draftPlayer" ${canDraft(current)?'':'disabled'}>Draft Player</button></div>`);$('addQueue').onclick=addToQueue;$('draftPlayer').onclick=()=>draftPlayer(current,id)}
-async function draftPlayer(i,playerId){const liveCurrent=(config?.currentPick||1)-1,isReplacement=selectionTarget!==null&&selectionTarget!==liveCurrent;if(!isReplacement&&!canDraft(i))return toast('You cannot make this pick.');if(isReplacement&&!isCommish())return toast('Commissioner access required.');await runTransaction(db,async tx=>{const cfgRef=doc(db,'draft','config'),pickRef=doc(db,'picks',String(i+1).padStart(2,'0')),pick=await tx.get(pickRef);if(pick.data().playerId)throw new Error('Pick already made.');tx.update(pickRef,{playerId,selectedAt:serverTimestamp(),selectedBy:profile.uid});if(!isReplacement){const cfg=await tx.get(cfgRef);if(!cfg.exists()||cfg.data().currentPick!==i+1)throw new Error('The pick changed. Refresh and try again.');tx.update(cfgRef,{currentPick:i+2,updatedAt:serverTimestamp()})}});closeModal();toast(isReplacement?'Pick updated':'Player drafted')}
-async function addToQueue(){if(!activePlayer)return;const ids=[...queueIds];if(!ids.includes(activePlayer.id))ids.push(activePlayer.id);await setDoc(doc(db,'queues',profile.uid),{playerIds:ids,updatedAt:serverTimestamp()});toast('Added to queue')}
-$('queueButton').onclick=showQueue;function showQueue(){const q=queueIds.map(id=>players.find(p=>p.id===id)).filter(Boolean);modal(`<div class="eyebrow">Private queue</div><h2>My Draft Queue</h2>${q.length?q.map((p,i)=>`<div class="queue-row"><div class="queue-rank">${i+1}</div><div><b>${escapeHtml(p.name)}</b><div class="muted tiny">${p.position} • ${escapeHtml(p.team)}</div></div><button class="btn danger" data-removeq="${p.id}">Remove</button></div>`).join(''):'<p class="muted">Your queue is empty.</p>'}<div class="modal-actions"><button class="btn" onclick="closeC2CModal()">Close</button></div>`);document.querySelectorAll('[data-removeq]').forEach(b=>b.onclick=async()=>{await setDoc(doc(db,'queues',profile.uid),{playerIds:queueIds.filter(x=>x!==b.dataset.removeq),updatedAt:serverTimestamp()});showQueue()})}
+$("registerTeam").addEventListener("change",()=>{
+  const account=accountForTeam($("registerTeam").value);
+  if(account) $("registerEmail").value=account.email;
+});
 
-$('proposeTrade').onclick=showTrade;function owned(team){return picks.map((p,i)=>({p,i})).filter(x=>ownerAt(x.i)===team)}function checks(id,team){return owned(team).map(x=>`<label class="pick-check"><input type="checkbox" value="${x.i}">${escapeHtml(assetLabel(x.i))}</label>`).join('')||'<p class="muted">No assets.</p>'}function showTrade(){if(!profile.teamName)return;modal(`<div class="eyebrow">Trade proposal</div><h2>Propose a Trade</h2><div class="trade-section"><b>Trade partner</b><select id="tradeTeam" class="btn full">${ORDER.filter(x=>x!==profile.teamName).map(x=>`<option>${x}</option>`).join('')}</select></div><div class="trade-section"><b>Your assets</b><div id="mineChecks" class="pick-checks">${checks('mineChecks',profile.teamName)}</div></div><div class="trade-section"><b>Their assets</b><div id="theirChecks" class="pick-checks"></div></div><div class="modal-actions"><button class="btn" onclick="closeC2CModal()">Cancel</button><button class="btn primary" id="sendOffer">Send Offer</button></div>`);const change=()=>{$('theirChecks').innerHTML=checks('theirChecks',$('tradeTeam').value)};$('tradeTeam').onchange=change;change();$('sendOffer').onclick=sendOffer}
-async function sendOffer(){const to=$('tradeTeam').value,give=[...document.querySelectorAll('#mineChecks input:checked')].map(x=>Number(x.value)),receive=[...document.querySelectorAll('#theirChecks input:checked')].map(x=>Number(x.value));if(!give.length&&!receive.length)return toast('Choose at least one draft asset.');await addDoc(collection(db,'offers'),{fromUid:profile.uid,fromTeam:profile.teamName,toTeam:to,participants:[profile.teamName,to],give,receive,status:'pending',createdAt:serverTimestamp()});closeModal();toast('Trade offer sent')}
-function renderOffersBadge(){const pending=offers.filter(o=>o.status==='pending'&&(o.toTeam===profile.teamName||o.fromTeam===profile.teamName));$('offerBadge').textContent=pending.length;$('offerBadge').classList.toggle('hidden',!pending.length)}
-$('viewOffers').onclick=showOffers;function showOffers(){const list=offers.sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));modal(`<div class="eyebrow">Trade center</div><h2>Offers</h2>${list.length?list.map(o=>`<div class="list-card"><h3>${escapeHtml(o.fromTeam)} → ${escapeHtml(o.toTeam)} <span class="muted">(${o.status})</span></h3><p><b>${escapeHtml(o.fromTeam)} sends:</b><br>${o.give.length?o.give.map(assetLabel).map(escapeHtml).join('<br>'):'No draft assets'}</p><p><b>${escapeHtml(o.toTeam)} sends:</b><br>${o.receive.length?o.receive.map(assetLabel).map(escapeHtml).join('<br>'):'No draft assets'}</p>${o.status==='pending'&&o.toTeam===profile.teamName?`<div class="actions"><button class="btn green" data-accept="${o.id}">Accept</button><button class="btn danger" data-decline="${o.id}">Decline</button></div>`:''}${o.status==='pending'&&o.fromTeam===profile.teamName?`<button class="btn danger" data-cancel="${o.id}">Cancel Offer</button>`:''}</div>`).join(''):'<p class="muted">No offers yet.</p>'}<div class="modal-actions"><button class="btn" onclick="closeC2CModal()">Close</button></div>`);document.querySelectorAll('[data-accept]').forEach(b=>b.onclick=()=>acceptOffer(b.dataset.accept));document.querySelectorAll('[data-decline]').forEach(b=>b.onclick=()=>updateDoc(doc(db,'offers',b.dataset.decline),{status:'declined',respondedAt:serverTimestamp()}).then(showOffers));document.querySelectorAll('[data-cancel]').forEach(b=>b.onclick=()=>updateDoc(doc(db,'offers',b.dataset.cancel),{status:'canceled',respondedAt:serverTimestamp()}).then(showOffers))}
-async function acceptOffer(id){await runTransaction(db,async tx=>{const ref=doc(db,'offers',id),snap=await tx.get(ref);if(!snap.exists()||snap.data().status!=='pending'||snap.data().toTeam!==profile.teamName)throw new Error('Offer unavailable.');const o=snap.data(),stamp=new Date().toISOString();for(const i of o.give){const pr=doc(db,'picks',String(i+1).padStart(2,'0')),ps=await tx.get(pr),hist=ps.data().tradeHistory||[];tx.update(pr,{ownerTeam:o.toTeam,tradeHistory:[...hist,{offerId:id,from:o.fromTeam,to:o.toTeam,give:o.give,receive:o.receive,assetMovedFrom:o.fromTeam,assetMovedTo:o.toTeam,acceptedAt:stamp}]})}for(const i of o.receive){const pr=doc(db,'picks',String(i+1).padStart(2,'0')),ps=await tx.get(pr),hist=ps.data().tradeHistory||[];tx.update(pr,{ownerTeam:o.fromTeam,tradeHistory:[...hist,{offerId:id,from:o.fromTeam,to:o.toTeam,give:o.give,receive:o.receive,assetMovedFrom:o.toTeam,assetMovedTo:o.fromTeam,acceptedAt:stamp}]})}tx.update(ref,{status:'accepted',respondedAt:serverTimestamp()})});closeModal();toast('Trade accepted')}
-function showTradeHistory(i){const h=picks[i]?.tradeHistory||[];modal(`<div class="eyebrow">Trade history</div><h2>${escapeHtml(assetLabel(i))}</h2>${h.map((x,n)=>`<div class="list-card"><h3>Trade ${n+1}: ${escapeHtml(x.from)} and ${escapeHtml(x.to)}</h3><p><b>${escapeHtml(x.from)} sent:</b><br>${x.give.length?x.give.map(assetLabel).map(escapeHtml).join('<br>'):'No draft assets'}</p><p><b>${escapeHtml(x.to)} sent:</b><br>${x.receive.length?x.receive.map(assetLabel).map(escapeHtml).join('<br>'):'No draft assets'}</p></div>`).join('')}<div class="modal-actions"><button class="btn" onclick="closeC2CModal()">Close</button></div>`)}
+$("registerForm").addEventListener("submit",async event=>{
+  event.preventDefault();
+  setMessage("authMessage");
+  const displayName=$("registerName").value.trim();
+  const requestedTeam=$("registerTeam").value;
+  const email=normalizeEmail($("registerEmail").value);
+  const password=$("registerPassword").value;
+  const assigned=accountForTeam(requestedTeam);
 
-$('pauseDraft').onclick=()=>updateDoc(doc(db,'draft','config'),{paused:!config.paused,updatedAt:serverTimestamp()});$('undoPick').onclick=undoPick;$('editPick').onclick=editPick;$('forcePick').onclick=()=>{$('playersDrawer').classList.add('open');toast('Choose a player; commissioner can force the current pick.')};$('resetDraft').onclick=resetDraft;
-async function undoPick(){const i=(config.currentPick||1)-2;if(i<0)return toast('No pick to undo.');const batch=writeBatch(db);batch.update(doc(db,'picks',String(i+1).padStart(2,'0')),{playerId:null,selectedAt:null,selectedBy:null});batch.update(doc(db,'draft','config'),{currentPick:i+1,updatedAt:serverTimestamp()});await batch.commit();toast('Last pick undone')}
-async function editPick(){const made=picks.filter(p=>p?.playerId);if(!made.length)return toast('No completed picks.');modal(`<div class="eyebrow">Edit pick</div><h2>Select a completed pick</h2>${made.map(p=>`<button class="btn full" data-edit="${p.overall-1}">${escapeHtml(assetLabel(p.overall-1))}</button>`).join('')}<div class="modal-actions"><button class="btn" onclick="closeC2CModal()">Cancel</button></div>`);document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=async()=>{const i=Number(b.dataset.edit);await updateDoc(doc(db,'picks',String(i+1).padStart(2,'0')),{playerId:null,selectedAt:null,selectedBy:null});selectionTarget=i;$('modal').classList.add('hidden');$('playersDrawer').classList.add('open');toast(`Choose replacement for ${roundPick(i)}`)})}
-async function resetDraft(){if(!confirm('This permanently clears every pick, trade, and queue. Continue?'))return;const batch=writeBatch(db);for(let i=0;i<72;i++)batch.set(doc(db,'picks',String(i+1).padStart(2,'0')),{overall:i+1,round:Math.floor(i/12)+1,roundPick:(i%12)+1,originalOwner:originalOwners[i],ownerTeam:originalOwners[i],playerId:null,tradeHistory:[]});batch.set(doc(db,'draft','config'),{currentPick:1,paused:false,initialized:true,updatedAt:serverTimestamp()});await batch.commit();const os=await getDocs(collection(db,'offers'));for(const d of os.docs)await deleteDoc(d.ref);toast('Draft reset')}
+  if(!assigned || assigned.email!==email){
+    setMessage("authMessage","That email does not match the selected draft team. Use the assigned email address.","error");
+    return;
+  }
 
-$('manageMembers').onclick=showMembers;async function showMembers(){const s=await getDocs(collection(db,'users')),users=s.docs.map(d=>({uid:d.id,...d.data()}));modal(`<div class="eyebrow">Commissioner</div><h2>Manage Member Accounts</h2><p class="muted">Assign each registered email to exactly one league team.</p>${users.map(u=>`<div class="member-row"><div class="queue-rank">${u.approved?'✓':'?'}</div><div><b>${escapeHtml(u.requestedName||u.email)}</b><div class="tiny muted">${escapeHtml(u.email||'')}</div></div><select class="btn" data-user="${u.uid}"><option value="">Pending</option>${ORDER.map(t=>`<option ${u.teamName===t?'selected':''}>${t}</option>`).join('')}<option value="COMMISSIONER" ${u.role==='commissioner'?'selected':''}>Commissioner</option></select></div>`).join('')}<div class="modal-actions"><button class="btn" onclick="closeC2CModal()">Close</button></div>`);document.querySelectorAll('[data-user]').forEach(s=>s.onchange=async()=>{const commissioner=s.value==='COMMISSIONER';await updateDoc(doc(db,'users',s.dataset.user),{teamName:commissioner?'Peckin':(s.value||null),role:commissioner?'commissioner':'member',approved:Boolean(s.value)});toast('Account updated')})}
+  try{
+    const credential=await createUserWithEmailAndPassword(auth,email,password);
+    const isCommissioner=email===COMMISSIONER_EMAIL;
+    await setDoc(doc(db,"users",credential.user.uid),{
+      uid:credential.user.uid,
+      displayName,
+      email,
+      requestedTeam,
+      team:isCommissioner?"Peckin":null,
+      draftPosition:isCommissioner?8:null,
+      role:isCommissioner?"commissioner":"member",
+      status:isCommissioner?"approved":"pending",
+      createdAt:serverTimestamp(),
+      approvedAt:isCommissioner?serverTimestamp():null,
+      approvedBy:isCommissioner?credential.user.uid:null
+    });
+    toast(isCommissioner?"Commissioner account created":"Account created");
+  }catch(error){
+    console.error(error);
+    setMessage("authMessage",friendlyError(error),"error");
+  }
+});
 
-$('draftCenterToggle').onclick=()=>$('draftCenter').classList.add('open');$('playersToggle').onclick=()=>$('playersDrawer').classList.add('open');document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>$(b.dataset.close).classList.remove('open'));$('modal').onclick=e=>{if(e.target===$('modal'))closeModal()};
+$("signInForm").addEventListener("submit",async event=>{
+  event.preventDefault();
+  setMessage("authMessage");
+  try{
+    await signInWithEmailAndPassword(auth,normalizeEmail($("signInEmail").value),$("signInPassword").value);
+  }catch(error){
+    console.error(error);
+    setMessage("authMessage",friendlyError(error),"error");
+  }
+});
+
+$("forgotPassword").addEventListener("click",async()=>{
+  const email=normalizeEmail($("signInEmail").value);
+  if(!email){
+    setMessage("authMessage","Enter your email above, then click Forgot password.","error");
+    return;
+  }
+  try{
+    await sendPasswordResetEmail(auth,email);
+    setMessage("authMessage","Password-reset email sent. Check your inbox and spam folder.","success");
+  }catch(error){
+    setMessage("authMessage",friendlyError(error),"error");
+  }
+});
+
+document.querySelectorAll("[data-signout]").forEach(button=>button.addEventListener("click",()=>signOut(auth)));
+$("pendingRefresh").addEventListener("click",()=>loadCurrentUser(auth.currentUser,true));
+$("refreshMembers").addEventListener("click",loadMemberDashboard);
+
+async function loadCurrentUser(user,manual=false){
+  if(!user){ showOnly("authScreen"); return; }
+  try{
+    const ref=doc(db,"users",user.uid);
+    const snap=await getDoc(ref);
+    if(!snap.exists()){
+      const assigned=accountForEmail(user.email);
+      if(!assigned){
+        await signOut(auth);
+        showOnly("authScreen");
+        setMessage("authMessage","This email is not assigned to a draft team.","error");
+        return;
+      }
+      const isCommissioner=normalizeEmail(user.email)===COMMISSIONER_EMAIL;
+      await setDoc(ref,{
+        uid:user.uid,displayName:user.email.split("@")[0],email:normalizeEmail(user.email),
+        requestedTeam:assigned.team,team:isCommissioner?"Peckin":null,
+        draftPosition:isCommissioner?8:null,role:isCommissioner?"commissioner":"member",
+        status:isCommissioner?"approved":"pending",createdAt:serverTimestamp()
+      });
+      return loadCurrentUser(user);
+    }
+
+    const profile=snap.data();
+    if(profile.status==="pending"){
+      $("pendingTeam").textContent=profile.requestedTeam || "Not selected";
+      showOnly("pendingScreen");
+      if(manual) toast("Approval is still pending");
+      return;
+    }
+    if(profile.status==="rejected"){
+      $("rejectedMessage").textContent=profile.rejectionReason || "The commissioner rejected this registration.";
+      showOnly("rejectedScreen");
+      return;
+    }
+    if(profile.status!=="approved"){
+      showOnly("pendingScreen");
+      return;
+    }
+
+    $("signedInTeam").textContent=profile.team;
+    $("signedInEmail").textContent=profile.email;
+    $("memberWelcome").textContent=profile.role==="commissioner"
+      ? "You are signed in as Peckin with commissioner access."
+      : `You are signed in as ${profile.team}.`;
+    $("commissionerDashboard").classList.toggle("hidden",profile.role!=="commissioner");
+    showOnly("app");
+    if(profile.role==="commissioner") await loadMemberDashboard();
+  }catch(error){
+    console.error(error);
+    showOnly("authScreen");
+    setMessage("authMessage",friendlyError(error),"error");
+  }
+}
+
+async function loadMemberDashboard(){
+  if(!auth.currentUser) return;
+  setMessage("memberMessage");
+  try{
+    const snapshot=await getDocs(query(collection(db,"users"),orderBy("createdAt","asc")));
+    const users=snapshot.docs.map(d=>({id:d.id,...d.data()}));
+    const pending=users.filter(x=>x.status==="pending");
+    const approved=users.filter(x=>x.status==="approved");
+    const assignedTeams=new Set(approved.map(x=>x.team).filter(Boolean));
+    const available=TEAM_ACCOUNTS.filter(x=>!assignedTeams.has(x.team));
+
+    $("pendingCount").textContent=pending.length;
+    $("approvedCount").textContent=approved.length;
+    $("availableCount").textContent=available.length;
+
+    $("pendingUsers").innerHTML=pending.length ? pending.map(renderPendingUser).join("") :
+      `<div class="empty-state">There are no pending registrations.</div>`;
+
+    $("approvedUsers").innerHTML=approved.length ? approved.map(renderApprovedUser).join("") :
+      `<div class="empty-state">No accounts have been approved.</div>`;
+
+    document.querySelectorAll("[data-approve-user]").forEach(button=>button.addEventListener("click",()=>approveUser(button.dataset.approveUser)));
+    document.querySelectorAll("[data-reject-user]").forEach(button=>button.addEventListener("click",()=>rejectUser(button.dataset.rejectUser)));
+    document.querySelectorAll("[data-revoke-user]").forEach(button=>button.addEventListener("click",()=>revokeUser(button.dataset.revokeUser)));
+  }catch(error){
+    console.error(error);
+    setMessage("memberMessage",friendlyError(error),"error");
+  }
+}
+
+function safe(value){
+  return String(value??"").replace(/[&<>"']/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[char]));
+}
+function teamOptions(selected){
+  return TEAM_ACCOUNTS.map(x=>`<option value="${x.team}" ${x.team===selected?"selected":""}>${x.team}</option>`).join("");
+}
+function renderPendingUser(user){
+  return `<div class="member-row">
+    <div><h4>${safe(user.displayName)}</h4><p>${safe(user.email)}</p></div>
+    <div><p>Requested team</p><strong>${safe(user.requestedTeam)}</strong></div>
+    <div><select id="assign-${user.id}">${teamOptions(user.requestedTeam)}</select></div>
+    <div class="member-actions">
+      <button class="btn green" data-approve-user="${user.id}">Approve</button>
+      <button class="btn danger" data-reject-user="${user.id}">Reject</button>
+    </div>
+  </div>`;
+}
+function renderApprovedUser(user){
+  return `<div class="member-row">
+    <div><h4>${safe(user.team)}</h4><p>${safe(user.email)}</p></div>
+    <div><span class="role-chip ${user.role==="commissioner"?"commissioner":""}">${safe(user.role)}</span></div>
+    <div><p>${safe(user.displayName)}</p></div>
+    <div class="member-actions">
+      ${user.role==="commissioner"?"":`<button class="btn danger" data-revoke-user="${user.id}">Return to Pending</button>`}
+    </div>
+  </div>`;
+}
+
+async function approveUser(uid){
+  const team=$(`assign-${uid}`).value;
+  const account=accountForTeam(team);
+  if(!account) return;
+  try{
+    const userSnap=await getDoc(doc(db,"users",uid));
+    if(!userSnap.exists()) throw new Error("User record was not found.");
+    const profile=userSnap.data();
+    if(normalizeEmail(profile.email)!==account.email){
+      setMessage("memberMessage",`The registered email does not match ${team}. Choose the team assigned to ${profile.email}.`,"error");
+      return;
+    }
+
+    const all=await getDocs(collection(db,"users"));
+    const duplicate=all.docs.some(d=>d.id!==uid && d.data().status==="approved" && d.data().team===team);
+    if(duplicate){
+      setMessage("memberMessage",`${team} is already assigned to another approved account.`,"error");
+      return;
+    }
+
+    await updateDoc(doc(db,"users",uid),{
+      team,
+      draftPosition:account.draftPosition,
+      role:"member",
+      status:"approved",
+      approvedAt:serverTimestamp(),
+      approvedBy:auth.currentUser.uid,
+      rejectionReason:null
+    });
+    toast(`${team} approved`);
+    await loadMemberDashboard();
+  }catch(error){
+    setMessage("memberMessage",friendlyError(error),"error");
+  }
+}
+async function rejectUser(uid){
+  const reason=window.prompt("Optional reason for rejection:","Email or team selection needs to be corrected.");
+  if(reason===null) return;
+  try{
+    await updateDoc(doc(db,"users",uid),{
+      status:"rejected",rejectionReason:reason,approvedAt:null,approvedBy:auth.currentUser.uid
+    });
+    toast("Registration rejected");
+    await loadMemberDashboard();
+  }catch(error){ setMessage("memberMessage",friendlyError(error),"error"); }
+}
+async function revokeUser(uid){
+  if(!window.confirm("Return this member to Pending status?")) return;
+  try{
+    await updateDoc(doc(db,"users",uid),{
+      status:"pending",team:null,draftPosition:null,approvedAt:null,approvedBy:auth.currentUser.uid
+    });
+    toast("Account returned to pending");
+    await loadMemberDashboard();
+  }catch(error){ setMessage("memberMessage",friendlyError(error),"error"); }
+}
+
+onAuthStateChanged(auth,user=>{
+  if(user) loadCurrentUser(user);
+  else showOnly("authScreen");
+});
