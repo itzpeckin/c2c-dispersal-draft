@@ -7,7 +7,7 @@ import {
   getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs,
   serverTimestamp, query, orderBy, onSnapshot, runTransaction, addDoc
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=500";
+import { firebaseConfig } from "./firebase-config.js?v=600";
 
 const TEAM_ACCOUNTS = [
   { team:"YoByronWatkins", email:"byronwatkins@gmail.com", draftPosition:1 },
@@ -50,6 +50,13 @@ let tradeOffers=[];
 let tradeHistory=[];
 let unsubscribeTrades=null;
 let activeTradeTab="propose";
+let hideDraftedPlayers=true;
+let queueItems=[];
+let unsubscribeQueue=null;
+let presenceEntries=[];
+let unsubscribePresence=null;
+let presenceTimer=null;
+let currentView="Draft Board";
 
 function normalizeEmail(v){return String(v||"").trim().toLowerCase()}
 function accountForEmail(email){return TEAM_ACCOUNTS.find(x=>x.email===normalizeEmail(email))}
@@ -175,6 +182,7 @@ async function loadCurrentUser(user,manual=false){
     showOnly("app");
     renderBoard();
     subscribeToDraft();
+    subscribeToQueueAndPresence();
     if(!players.length) await loadPlayers();
     if(commissioner)await loadMemberDashboard();
   }catch(error){showOnly("authScreen");setMessage("authMessage",friendlyError(error),"error")}
@@ -183,6 +191,9 @@ function cleanupDraftListener(){
   if(unsubscribeDraft){unsubscribeDraft();unsubscribeDraft=null}
   if(unsubscribeSelections){unsubscribeSelections();unsubscribeSelections=null}
   if(unsubscribeTrades){unsubscribeTrades();unsubscribeTrades=null}
+  if(unsubscribeQueue){unsubscribeQueue();unsubscribeQueue=null}
+  if(unsubscribePresence){unsubscribePresence();unsubscribePresence=null}
+  if(presenceTimer){clearInterval(presenceTimer);presenceTimer=null}
 }
 
 function subscribeToDraft(){
@@ -203,8 +214,9 @@ function subscribeToDraft(){
     snapshot.docs.forEach(d=>{const data=d.data();draftSelections[String(data.pickIndex)]={id:d.id,...data}});
     renderDraftState();
     renderPlayerRows();
-    renderTradeCenter();
-    if(selectedPlayerId)updatePlayerDraftButton();
+    pruneDraftedQueue();
+    renderTradeCenter();updateCommissionerSummary();
+    if(selectedPlayerId){updatePlayerDraftButton();renderDraftedPlayerInfo(playerById(selectedPlayerId));}
   },error=>{console.error(error);toast("Draft selections could not be synchronized")});
 
   unsubscribeTrades=onSnapshot(query(collection(db,"tradeOffers"),orderBy("createdAt","desc")),snapshot=>{
@@ -212,6 +224,7 @@ function subscribeToDraft(){
     tradeHistory=tradeOffers.filter(trade=>["accepted","reverted"].includes(trade.status));
     renderTradeCenter();
     renderDraftState();
+    updateCommissionerSummary();
   },error=>{console.error(error);toast("Trade offers could not be synchronized")});
 }
 function currentOwnerForPick(index){
@@ -266,14 +279,20 @@ function renderBoard(){
       const status=!liveDraftState?.initialized?"Waiting":index<liveDraftState.currentPick?"Complete":index===liveDraftState.currentPick?"On the clock":"Upcoming";
       const originalOwner=ownerForOverallPick(index),currentOwner=currentOwnerForPick(index);
       const traded=currentOwner!==originalOwner,detail=tradeDetailForPick(index);
-      html.push(`<div class="pick-tile ${index===liveDraftState?.currentPick?"current":""} ${index<(liveDraftState?.currentPick??0)?"past":""} ${traded?"traded":""} ${player?"has-player":""}" style="grid-column:${col+1};grid-row:${round+2}">
-        <div class="pick-topline"><div class="pick-label">Pick #${index+1}</div>${traded?`<div class="traded-to">To: ${safe(currentOwner)}</div>`:""}</div>
-        ${player?`<div class="pick-player-name">${safe(player.name)}</div><div class="pick-player-meta">${safe(player.position)} • ${safe(player.team||player.school||"—")}</div>`:`<div class="empty-pick">${status}</div>`}
+      html.push(`<div class="pick-tile ${index===liveDraftState?.currentPick?"current":""} ${index<(liveDraftState?.currentPick??0)?"past":""} ${traded?"traded":""} ${player?"has-player":""}" data-pick-index="${index}" style="grid-column:${col+1};grid-row:${round+2}">
+        <div class="pick-topline"><div class="pick-label">Pick #${index+1}</div>${traded?`<div class="traded-to" data-full-text="To: ${safe(currentOwner)}">To: ${safe(currentOwner)}</div>`:""}</div>
+        ${player?`<div class="pick-player-name" data-full-text="${safe(player.name)}">${safe(player.name)}</div><div class="pick-player-meta" data-full-text="${safe(player.position)} • ${safe(player.team||player.school||"—")}">${safe(player.position)} • ${safe(player.team||player.school||"—")}</div>`:`<div class="empty-pick">${status}</div>`}
         ${traded?`<button class="trade-detail-footer" type="button" ${detail?`onclick="openC2CTradeDetail(${index})"`:"disabled"}>${detail?"View trade details":"Trade details will appear here"}</button>`:(player?`<div class="pick-status-footer">${status}</div>`:"")}
       </div>`);
     }
   }
   $("draftBoard").innerHTML=html.join("");
+  document.querySelectorAll(".pick-tile.has-player[data-pick-index]").forEach(tile=>tile.onclick=event=>{
+    if(event.target.closest(".trade-detail-footer"))return;
+    const selection=draftSelections[String(tile.dataset.pickIndex)];
+    if(selection)openPlayerProfile(selection.playerId);
+  });
+  applyOverflowTooltips($("draftBoard"));
 }
 function renderDraftState(){
   const state=liveDraftState;
@@ -297,6 +316,7 @@ function renderDraftState(){
   }
   $("pauseResumeDraft").textContent=state?.status==="paused"?"Resume Draft":"Pause Draft";
   renderBoard();
+  updateCommissionerSummary();
 }
 
 async function writeDraftState(data){
@@ -341,7 +361,7 @@ $("resetDraftState").onclick=async()=>{
 $("commissionerToggle").onclick=$("commissionerRail").onclick=()=>{
   closePlayerDrawer();
   $("commissionerDrawer").classList.add("open");
-  updateDrawerBackdrop();
+  updateDrawerBackdrop();updatePresence("Commissioner Center",true);
 };
 $("closeCommissioner").onclick=closeCommissionerDrawer;
 $("refreshMembers").onclick=loadMemberDashboard;
@@ -411,7 +431,7 @@ async function loadPlayers(){
     ]);
     players=[...nfl,...ncaa].filter(p=>p.name).sort((a,b)=>a.name.localeCompare(b.name));
     $("playerCountBadge").textContent=players.length;
-    renderPlayerRows();
+    renderPlayerRows();updateCommissionerSummary();
   }catch(error){
     console.error(error);
     $("playerRows").innerHTML=`<tr><td colspan="6">Could not load the player CSV files.</td></tr>`;
@@ -440,7 +460,8 @@ function filteredPlayers(){
     const levelOk=playerLevelFilter==="ALL"||player.level===playerLevelFilter;
     const positionOk=playerPositionFilter==="ALL"||player.position===playerPositionFilter;
     const haystack=`${player.name} ${player.team} ${player.school} ${player.position} ${player.level} ${player.class_year}`.toLowerCase();
-    return levelOk&&positionOk&&(!term||haystack.includes(term));
+    const draftedOk=!hideDraftedPlayers||!draftedPlayerIds().has(player.id);
+    return levelOk&&positionOk&&draftedOk&&(!term||haystack.includes(term));
   });
   return filtered.sort((a,b)=>{
     const primary=comparePlayerValues(playerSortValue(a,playerSortKey),playerSortValue(b,playerSortKey));
@@ -452,22 +473,24 @@ function displayFantasyPoints(player){
   const value=String(player.fantasy_points||"").trim();
   return value?`${Number(value).toFixed(1)}`:"Pending";
 }
+function selectionForPlayer(id){return Object.values(draftSelections).find(item=>item.playerId===id)||null}
 function renderPlayerRows(){
   if(!$("playerRows"))return;
   const list=filteredPlayers(),drafted=draftedPlayerIds();
-  $("playerCountBadge").textContent=list.filter(player=>!drafted.has(player.id)).length;
+  $("playerCountBadge").textContent=players.filter(player=>!drafted.has(player.id)).length;
   $("playerRows").innerHTML=list.length?list.map(player=>{
-    const isDrafted=drafted.has(player.id);
-    const selection=Object.values(draftSelections).find(item=>item.playerId===player.id);
+    const isDrafted=drafted.has(player.id),selection=selectionForPlayer(player.id);
+    const owner=selection?currentOwnerForPick(selection.pickIndex):null;
+    const draftedText=selection?`Drafted • Pick #${Number(selection.pickIndex)+1} • Current owner: ${owner}`:"Drafted";
     return `<tr class="${isDrafted?"drafted":""}" data-player-id="${safe(player.id)}">
-      <td class="player-name-cell"><strong>${safe(player.name)}</strong><span>${isDrafted?`Drafted Pick #${Number(selection.pickIndex)+1}`:(player.level==="NFL"?`Sleeper roster ${safe(player.source_roster)} • ${safe(player.roster_slot)}`:"Fantrax player pool")}</span></td>
-      <td><span class="level-pill ${player.level.toLowerCase()}">${safe(player.level)}</span></td>
-      <td><span class="position-pill">${safe(player.position)}</span></td>
+      <td class="player-name-cell"><strong>${safe(player.name)}</strong><span>${isDrafted?safe(draftedText):(player.level==="NFL"?`Sleeper roster ${safe(player.source_roster)} • ${safe(player.roster_slot)}`:"Fantrax player pool")}</span></td>
+      <td><span class="level-pill ${player.level.toLowerCase()}">${safe(player.level)}</span></td><td><span class="position-pill">${safe(player.position)}</span></td>
       <td>${safe(player.team||player.school||"—")}</td><td>${safe(player.class_year||"—")}</td>
-      <td class="${player.fantasy_points?"fp-value":"fp-pending"}">${isDrafted?`<span class="drafted-label">DRAFTED</span>`:displayFantasyPoints(player)}</td>
+      <td class="${player.fantasy_points?"fp-value":"fp-pending"}">${isDrafted?`<span class="drafted-label">DRAFTED</span><span class="drafted-label-detail">Pick #${selection.pickIndex+1}</span>`:displayFantasyPoints(player)}</td>
     </tr>`;
-  }).join(""):`<tr><td colspan="6">No players match the selected filters.</td></tr>`;
-  document.querySelectorAll("#playerRows tr[data-player-id]").forEach(row=>{row.onclick=()=>openPlayerProfile(row.dataset.playerId)});
+  }).join(""):`<tr><td colspan="6"><div class="empty-state">No players match the selected filters.</div></td></tr>`;
+  document.querySelectorAll("#playerRows tr[data-player-id]").forEach(row=>row.onclick=()=>openPlayerProfile(row.dataset.playerId));
+  applyOverflowTooltips($("playerRows"));
 }
 function openPlayerProfile(id){
   const player=players.find(x=>x.id===id);if(!player)return;
@@ -477,17 +500,19 @@ function openPlayerProfile(id){
   $("playerModalPosition").textContent=player.position||"—";$("playerModalTeam").textContent=player.team||player.school||"—";
   $("playerModalClass").textContent=player.class_year||"Not listed";$("playerModalFP").textContent=displayFantasyPoints(player);
   $("playerModalNote").textContent=player.level==="NFL"?"2025 PPR fantasy-point total from FantasyPros. This may differ from your Sleeper league because of custom scoring settings.":"Fantasy-point total supplied by the Fantrax roster export.";
+  renderDraftedPlayerInfo(player);
+  updateQueuePlayerButton();
   updatePlayerDraftButton();$("playerModal").classList.remove("hidden");
 }
 function closePlayerProfile(){$("playerModal").classList.add("hidden");selectedPlayerId=null}
 
 function closePlayerDrawer(){
   $("playerDrawer").classList.remove("open");
-  updateDrawerBackdrop();
+  updateDrawerBackdrop();updatePresence("Draft Board",true);
 }
 function closeCommissionerDrawer(){
   $("commissionerDrawer").classList.remove("open");
-  updateDrawerBackdrop();
+  updateDrawerBackdrop();updatePresence("Draft Board",true);
 }
 function updateDrawerBackdrop(){
   let backdrop=$("drawerBackdrop");
@@ -509,7 +534,7 @@ $("playerRail").onclick=()=>{
   closeCommissionerDrawer();
   $("playerDrawer").classList.add("open");
   updateDrawerBackdrop();
-  renderPlayerRows();
+  renderPlayerRows();updatePresence("Viewing Player Pool",true);
 };
 $("closePlayerDrawer").onclick=closePlayerDrawer;
 $("closePlayerModal").onclick=closePlayerProfile;
@@ -526,6 +551,98 @@ document.querySelectorAll("[data-position]").forEach(button=>button.onclick=()=>
   renderPlayerRows();
 });
 
+
+
+function applyOverflowTooltips(root){
+  if(!root)return;
+  root.querySelectorAll("[data-full-text]").forEach(el=>{
+    requestAnimationFrame(()=>{
+      if(el.scrollWidth>el.clientWidth)el.title=el.dataset.fullText;
+      else el.removeAttribute("title");
+    });
+  });
+}
+function renderDraftedPlayerInfo(player){
+  const selection=selectionForPlayer(player.id),box=$("playerDraftedInfo");
+  if(!selection){box.classList.add("hidden");box.innerHTML="";return}
+  const currentOwner=currentOwnerForPick(selection.pickIndex),originalOwner=selection.ownerTeam||ownerForOverallPick(selection.pickIndex);
+  const relevant=tradeHistory.filter(trade=>[...(trade.fromPicks||[]),...(trade.toPicks||[])].includes(selection.pickIndex));
+  box.innerHTML=`<div class="drafted-info-grid"><div><span>Drafted at</span><strong>Pick #${selection.pickIndex+1}</strong></div><div><span>Drafted by</span><strong>${safe(originalOwner)}</strong></div><div><span>${currentOwner!==originalOwner?"Traded to":"Current owner"}</span><strong>${safe(currentOwner)}</strong></div></div>${relevant.length?`<div class="drafted-history">${relevant.length} trade record${relevant.length===1?"":"s"} attached to this asset.</div>`:""}`;
+  box.classList.remove("hidden");
+}
+function queueContains(id){return queueItems.includes(id)}
+function updateQueuePlayerButton(){
+  if(!$("queuePlayerButton"))return;
+  $("queuePlayerButton").textContent=queueContains(selectedPlayerId)?"Remove from Queue":"Add to Queue";
+}
+async function saveQueue(items){
+  if(!auth.currentUser)return;
+  await setDoc(doc(db,"queues",auth.currentUser.uid),{uid:auth.currentUser.uid,team:currentProfile.team,items,updatedAt:serverTimestamp()},{merge:true});
+}
+async function pruneDraftedQueue(){
+  if(!auth.currentUser||!queueItems.length)return;
+  const drafted=draftedPlayerIds(),clean=queueItems.filter(id=>!drafted.has(id));
+  if(clean.length!==queueItems.length)await saveQueue(clean);
+}
+async function toggleSelectedPlayerQueue(){
+  if(!selectedPlayerId)return;
+  const next=queueContains(selectedPlayerId)?queueItems.filter(id=>id!==selectedPlayerId):[...queueItems,selectedPlayerId];
+  await saveQueue(next);toast(queueContains(selectedPlayerId)?"Removed from queue":"Added to queue");
+}
+function renderQueue(){
+  const drafted=draftedPlayerIds(),available=queueItems.filter(id=>!drafted.has(id)&&playerById(id));
+  $("queueCountBadge").textContent=available.length;
+  $("queueList").innerHTML=available.length?available.map((id,index)=>{const p=playerById(id);return `<div class="queue-row"><div class="queue-rank">${index+1}</div><div class="queue-row-main"><strong data-full-text="${safe(p.name)}">${safe(p.name)}</strong><span>${safe(p.position)} • ${safe(p.team||p.school||"—")} • ${displayFantasyPoints(p)} FP</span></div><div class="queue-row-actions"><button class="btn small" data-queue-up="${index}" ${index===0?"disabled":""}>↑</button><button class="btn small" data-queue-down="${index}" ${index===available.length-1?"disabled":""}>↓</button><button class="btn danger small" data-queue-remove="${id}">×</button></div></div>`}).join(""):`<div class="empty-state">Your queue is empty.</div>`;
+  document.querySelectorAll("[data-queue-up]").forEach(b=>b.onclick=()=>moveQueue(Number(b.dataset.queueUp),-1));
+  document.querySelectorAll("[data-queue-down]").forEach(b=>b.onclick=()=>moveQueue(Number(b.dataset.queueDown),1));
+  document.querySelectorAll("[data-queue-remove]").forEach(b=>b.onclick=()=>saveQueue(queueItems.filter(id=>id!==b.dataset.queueRemove)));
+  applyOverflowTooltips($("queueList"));
+}
+async function moveQueue(index,direction){
+  const drafted=draftedPlayerIds(),visible=queueItems.filter(id=>!drafted.has(id)&&playerById(id));
+  const target=index+direction;if(target<0||target>=visible.length)return;
+  [visible[index],visible[target]]=[visible[target],visible[index]];
+  const unavailable=queueItems.filter(id=>!visible.includes(id));await saveQueue([...visible,...unavailable]);
+}
+async function draftTopQueue(){
+  const playerId=queueItems.find(id=>!draftedPlayerIds().has(id)&&playerById(id));
+  if(!playerId)return toast("No available queued players");
+  openPlayerProfile(playerId);
+  if($("draftPlayerButton").disabled)return toast("You cannot draft right now");
+  await saveDraftSelection();
+}
+function activePresence(){
+  const cutoff=Date.now()-150000;
+  return presenceEntries.filter(entry=>entry.online!==false&&entry.lastSeen?.toMillis?.()>=cutoff).sort((a,b)=>a.team.localeCompare(b.team));
+}
+function renderPresence(){
+  const online=activePresence();
+  $("presenceChip").textContent=`${online.length} online`;$("metricOnline").textContent=online.length;
+  $("presenceList").innerHTML=online.length?online.map(entry=>`<div class="presence-row"><div class="presence-name"><span class="online-dot"></span><strong>${safe(entry.team)}</strong></div><span>${safe(entry.view||"Draft Board")}</span></div>`).join(""):`<div class="empty-state">No active members detected.</div>`;
+}
+async function updatePresence(view=currentView,online=true){
+  if(!auth.currentUser||!currentProfile)return;
+  currentView=view;
+  try{await setDoc(doc(db,"presence",auth.currentUser.uid),{uid:auth.currentUser.uid,team:currentProfile.team,view,currentPick:liveDraftState?.currentPick??0,online,lastSeen:serverTimestamp()},{merge:true})}catch(error){console.warn("Presence update failed",error)}
+}
+function subscribeToQueueAndPresence(){
+  if(unsubscribeQueue)unsubscribeQueue();if(unsubscribePresence)unsubscribePresence();if(presenceTimer)clearInterval(presenceTimer);
+  unsubscribeQueue=onSnapshot(doc(db,"queues",auth.currentUser.uid),snap=>{queueItems=snap.exists()?(snap.data().items||[]):[];renderQueue();updateQueuePlayerButton()});
+  unsubscribePresence=onSnapshot(collection(db,"presence"),snapshot=>{presenceEntries=snapshot.docs.map(d=>d.data());renderPresence()});
+  updatePresence("Draft Board",true);presenceTimer=setInterval(()=>updatePresence(currentView,true),60000);
+}
+function updateCommissionerSummary(){
+  if(!$("metricStatus"))return;
+  const completed=Object.keys(draftSelections).length,accepted=tradeOffers.filter(t=>t.status==="accepted").length;
+  $("metricStatus").textContent=liveDraftState?.status||"waiting";$("metricCompleted").textContent=`${completed} / ${TOTAL_PICKS}`;
+  $("metricRemaining").textContent=Math.max(0,players.length-completed);$("metricTrades").textContent=accepted;$("metricCurrentOwner").textContent=currentPickOwner()||"—";
+}
+function csvEscape(value){const s=String(value??"");return /[",\n]/.test(s)?`"${s.replaceAll('"','""')}"`:s}
+function exportDraftResults(){
+  const rows=[["Overall Pick","Round","Round Pick","Original Owner","Current Owner","Player","Position","Team/School","Fantasy Points"]];
+  Object.values(draftSelections).sort((a,b)=>a.pickIndex-b.pickIndex).forEach(selection=>{const p=playerById(selection.playerId),rp=roundPick(selection.pickIndex);rows.push([selection.pickIndex+1,rp.round,rp.pick,selection.ownerTeam||ownerForOverallPick(selection.pickIndex),currentOwnerForPick(selection.pickIndex),selection.playerName,selection.playerPosition,selection.playerTeam,p?.fantasy_points||""])});
+  const blob=new Blob([rows.map(row=>row.map(csvEscape).join(",")).join("\n")],{type:"text/csv;charset=utf-8"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="C2C-Dispersal-Draft-Results.csv";a.click();URL.revokeObjectURL(url);
+}
 
 function currentPickOwner(){
   if(!liveDraftState?.initialized||liveDraftState.currentPick>=TOTAL_PICKS)return null;
@@ -739,7 +856,7 @@ document.querySelectorAll("[data-trade-tab]").forEach(button=>button.onclick=()=
 $("tradePartnerSelect").onchange=renderTradeAssetSelectors;
 $("tradeRail").onclick=()=>{
   closePlayerDrawer();closeCommissionerDrawer();
-  $("tradeDrawer").classList.add("open");updateDrawerBackdrop();renderTradeCenter();
+  $("tradeDrawer").classList.add("open");updateDrawerBackdrop();renderTradeCenter();updatePresence("Viewing Trade Center",true);
 };
 $("closeTradeDrawer").onclick=()=>{$("tradeDrawer").classList.remove("open");updateDrawerBackdrop()};
 $("closeTradeDetailModal").onclick=()=>$("tradeDetailModal").classList.add("hidden");
@@ -808,6 +925,20 @@ async function revertTrade(id){
     toast("Trade reverted");
   }catch(error){toast(error.message||"Trade could not be reverted")}
 }
+
+
+$("hideDraftedToggle").onchange=()=>{hideDraftedPlayers=$("hideDraftedToggle").checked;renderPlayerRows()};
+$("queuePlayerButton").onclick=toggleSelectedPlayerQueue;
+$("openQueueButton").onclick=()=>{$("queueModal").classList.remove("hidden");renderQueue();updatePresence("Viewing Queue",true)};
+$("closeQueueModal").onclick=()=>{$("queueModal").classList.add("hidden");updatePresence("Viewing Player Pool",true)};
+$("queueModal").onclick=event=>{if(event.target===$("queueModal"))$("closeQueueModal").click()};
+$("clearQueueButton").onclick=()=>{if(confirm("Clear your entire private queue?"))saveQueue([])};
+$("draftTopQueueButton").onclick=draftTopQueue;
+$("presenceChip").onclick=()=>{$("presenceModal").classList.remove("hidden");renderPresence()};
+$("closePresenceModal").onclick=()=>$("presenceModal").classList.add("hidden");
+$("presenceModal").onclick=event=>{if(event.target===$("presenceModal"))$("presenceModal").classList.add("hidden")};
+$("exportDraftButton").onclick=exportDraftResults;
+window.addEventListener("pagehide",()=>updatePresence(currentView,false));
 
 document.querySelectorAll("[data-sort]").forEach(button=>{
   button.addEventListener("click",()=>{

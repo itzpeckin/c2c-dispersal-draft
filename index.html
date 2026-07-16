@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#17324d">
   <title>C2C Dispersal Draft</title>
-  <link rel="stylesheet" href="./styles.css?v=500">
+  <link rel="stylesheet" href="./styles.css?v=600">
 </head>
 <body>
   <div id="loadingScreen" class="screen center-screen">
@@ -87,7 +87,7 @@
       </div>
       <div class="draft-status-wrap">
         <span id="liveStatusChip" class="status-chip waiting">Waiting for commissioner</span>
-        <span id="connectionChip" class="connection-chip">Connecting…</span>
+        <span id="connectionChip" class="connection-chip">Connecting…</span><button id="presenceChip" class="presence-chip" type="button">0 online</button>
       </div>
       <div class="spacer"></div>
       <div class="signed-in">
@@ -145,6 +145,8 @@
           <button class="filter-btn" data-position="WR">WR</button>
           <button class="filter-btn" data-position="TE">TE</button>
         </div>
+        <label class="drafted-toggle"><input id="hideDraftedToggle" type="checkbox" checked> Hide drafted players</label>
+        <button id="openQueueButton" class="btn small" type="button">My Queue <span id="queueCountBadge">0</span></button>
       </div>
 
       <div class="player-table-wrap">
@@ -159,7 +161,7 @@
               <th><button class="sort-btn active" type="button" data-sort="fantasy_points">Previous Season FP <span class="sort-arrow">▼</span></button></th>
             </tr>
           </thead>
-          <tbody id="playerRows"></tbody>
+          <tbody id="playerRows"><tr><td colspan="6"><div class="player-loading"><span class="mini-loader"></span> Loading player pool…</div></td></tr></tbody>
         </table>
       </div>
     </section>
@@ -176,12 +178,23 @@
           <div><span>Class</span><strong id="playerModalClass"></strong></div>
           <div class="fp-card"><span>Previous Season Fantasy Points</span><strong id="playerModalFP"></strong></div>
         </div>
-        <p id="playerModalNote" class="muted"></p>
-        <button id="draftPlayerButton" class="btn primary full" type="button">Draft Player</button>
+        <p id="playerModalNote" class="muted"></p><div id="playerDraftedInfo" class="drafted-info hidden"></div>
+        <div class="player-modal-actions"><button id="queuePlayerButton" class="btn" type="button">Add to Queue</button><button id="draftPlayerButton" class="btn primary" type="button">Draft Player</button></div>
         <p id="draftPlayerHint" class="tiny muted center-text"></p>
       </div>
     </div>
 
+
+    <div id="queueModal" class="player-modal hidden">
+      <div class="player-modal-card queue-card">
+        <button id="closeQueueModal" class="icon-btn modal-close">×</button>
+        <p class="eyebrow">Private to your account</p>
+        <h2>My Draft Queue</h2>
+        <p class="muted">Use the arrows to reorder. Drafted players are removed automatically.</p>
+        <div id="queueList" class="queue-list"></div>
+        <div class="queue-actions"><button id="draftTopQueueButton" class="btn primary" type="button">Draft Top Available</button><button id="clearQueueButton" class="btn danger" type="button">Clear Queue</button></div>
+      </div>
+    </div>
 
     <button id="tradeRail" class="trade-rail">Trade Center <span id="tradeOfferBadge" class="rail-badge hidden">0</span></button>
 
@@ -239,6 +252,14 @@
       </div>
     </div>
 
+    <div id="presenceModal" class="player-modal hidden">
+      <div class="player-modal-card presence-card">
+        <button id="closePresenceModal" class="icon-btn modal-close">×</button>
+        <p class="eyebrow">Live attendance</p><h2>Members Online</h2>
+        <div id="presenceList" class="presence-list"></div>
+      </div>
+    </div>
+
     <button id="commissionerRail" class="side-rail hidden">Commissioner</button>
 
     <aside id="commissionerDrawer" class="drawer">
@@ -274,6 +295,19 @@
       </section>
 
       <section class="drawer-section">
+        <p class="eyebrow">Draft overview</p><h3>Commissioner Summary</h3>
+        <div class="commissioner-metrics">
+          <div><span>Status</span><strong id="metricStatus">Waiting</strong></div>
+          <div><span>Completed</span><strong id="metricCompleted">0 / 72</strong></div>
+          <div><span>Remaining</span><strong id="metricRemaining">153</strong></div>
+          <div><span>Accepted trades</span><strong id="metricTrades">0</strong></div>
+          <div><span>Online</span><strong id="metricOnline">0</strong></div>
+          <div><span>Current owner</span><strong id="metricCurrentOwner">—</strong></div>
+        </div>
+        <button id="exportDraftButton" class="btn primary full" type="button">Export Draft Results CSV</button>
+      </section>
+
+      <section class="drawer-section">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Milestone 1</p>
@@ -296,6 +330,6 @@
   </div>
 
   <div id="toast" class="toast"></div>
-  <script type="module" src="./app.js?v=500"></script>
+  <script type="module" src="./app.js?v=600"></script>
 </body>
 </html>
