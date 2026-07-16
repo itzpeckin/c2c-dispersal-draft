@@ -7,7 +7,7 @@ import {
   getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs,
   serverTimestamp, query, orderBy, onSnapshot, runTransaction, addDoc
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=650";
+import { firebaseConfig } from "./firebase-config.js?v=660";
 
 const TEAM_ACCOUNTS = [
   { team:"YoByronWatkins", email:"byronwatkins@gmail.com", draftPosition:1 },
@@ -271,8 +271,15 @@ function renderBoard(){
   const html=[];
   const currentColumn=liveDraftState?.initialized&&liveDraftState.currentPick<TOTAL_PICKS
     ? columnForOverallPick(liveDraftState.currentPick):null;
+  const onlineTeams=new Set(activePresence().map(entry=>entry.team));
   for(let col=0;col<12;col++){
-    html.push(`<div class="owner-header ${currentColumn===col?"on-clock":""}" style="grid-column:${col+1};grid-row:1">${BASE_ORDER[col]}</div>`);
+    const team=BASE_ORDER[col];
+    html.push(`<div class="owner-header ${currentColumn===col?"on-clock":""}" style="grid-column:${col+1};grid-row:1">
+      <span class="owner-header-content">
+        ${onlineTeams.has(team)?`<span class="owner-online-dot" title="${safe(team)} is online"></span>`:""}
+        <span class="owner-header-name" data-full-text="${safe(team)}">${safe(team)}</span>
+      </span>
+    </div>`);
   }
   for(let round=0;round<6;round++){
     for(let col=0;col<12;col++){
@@ -342,23 +349,38 @@ $("pauseResumeDraft").onclick=async()=>{
 };
 
 $("resetDraftState").onclick=async()=>{
-  if(!confirm("Reset the entire draft and remove every selection?"))return;
+  if(!confirm("Reset the entire draft and permanently remove all picks and trade history?"))return;
   try{
-    const snapshot=await getDocs(collection(db,"draftSelections"));
-    for(const selectionDoc of snapshot.docs){
+    const selectionSnapshot=await getDocs(collection(db,"draftSelections"));
+    for(const selectionDoc of selectionSnapshot.docs){
       const data=selectionDoc.data();
       await runTransaction(db,async transaction=>{
         transaction.delete(selectionDoc.ref);
         transaction.delete(doc(db,"playerLocks",data.playerId));
       });
     }
+
+    const tradeSnapshot=await getDocs(collection(db,"tradeOffers"));
+    for(const tradeDoc of tradeSnapshot.docs){
+      await runTransaction(db,async transaction=>{
+        transaction.delete(tradeDoc.ref);
+      });
+    }
+
     await setDoc(doc(db,...DRAFT_STATE_REF_PATH),{
       initialized:false,status:"waiting",currentPick:0,currentOwner:null,totalPicks:TOTAL_PICKS,
       rounds:6,teams:BASE_ORDER,pickOwners:Array.from({length:TOTAL_PICKS},(_,i)=>ownerForOverallPick(i)),
       updatedAt:serverTimestamp(),updatedBy:auth.currentUser.uid
     });
-    commissionerDraftMode=null;toast("Entire draft reset");
-  }catch(error){toast(error.message||"Could not reset draft")}
+
+    tradeOffers=[];
+    tradeHistory=[];
+    renderTradeCenter();
+    commissionerDraftMode=null;
+    toast("Draft, picks, and trade history reset");
+  }catch(error){
+    toast(error.message||"Could not reset draft");
+  }
 };
 
 $("commissionerToggle").onclick=$("commissionerRail").onclick=()=>{
@@ -485,14 +507,32 @@ function renderPlayerRows(){
     const isDrafted=drafted.has(player.id),selection=selectionForPlayer(player.id);
     const owner=selection?currentOwnerForPick(selection.pickIndex):null;
     const draftedText=selection?`Drafted • Pick #${Number(selection.pickIndex)+1} • Current owner: ${owner}`:"Drafted";
+    const queued=queueContains(player.id);
     return `<tr class="${isDrafted?"drafted":""}" data-player-id="${safe(player.id)}">
-      <td class="player-name-cell"><strong>${safe(player.name)}</strong><span>${isDrafted?safe(draftedText):(player.level==="NFL"?`Sleeper roster ${safe(player.source_roster)} • ${safe(player.roster_slot)}`:"Fantrax player pool")}</span></td>
+      <td class="player-name-cell">
+        <div class="player-name-line">
+          <button class="quick-queue-button ${queued?"queued":""}" type="button" data-quick-queue="${safe(player.id)}" ${isDrafted?"disabled":""} title="${queued?"Remove from Queue":"Add to Queue"}">${queued?"✓":"+"}</button>
+          <strong class="player-name-text">${safe(player.name)}</strong>
+        </div>
+        <span>${isDrafted?safe(draftedText):(player.level==="NFL"?`Sleeper roster ${safe(player.source_roster)} • ${safe(player.roster_slot)}`:"Fantrax player pool")}</span>
+      </td>
       <td><span class="level-pill ${player.level.toLowerCase()}">${safe(player.level)}</span></td><td><span class="position-pill">${safe(player.position)}</span></td>
       <td>${safe(player.team||player.school||"—")}</td><td>${safe(player.class_year||"—")}</td>
       <td class="${player.fantasy_points?"fp-value":"fp-pending"}">${isDrafted?`<span class="drafted-label">DRAFTED</span><span class="drafted-label-detail">Pick #${selection.pickIndex+1}</span>`:displayFantasyPoints(player)}</td>
     </tr>`;
   }).join(""):`<tr><td colspan="6"><div class="empty-state">No players match the selected filters.</div></td></tr>`;
-  document.querySelectorAll("#playerRows tr[data-player-id]").forEach(row=>row.onclick=()=>openPlayerProfile(row.dataset.playerId,"drawer"));
+  document.querySelectorAll("#playerRows tr[data-player-id]").forEach(row=>row.onclick=event=>{
+    if(event.target.closest("[data-quick-queue]"))return;
+    openPlayerProfile(row.dataset.playerId,"drawer");
+  });
+  document.querySelectorAll("[data-quick-queue]").forEach(button=>button.onclick=async event=>{
+    event.stopPropagation();
+    const playerId=button.dataset.quickQueue;
+    const wasQueued=queueContains(playerId);
+    const next=wasQueued?queueItems.filter(id=>id!==playerId):[...queueItems,playerId];
+    await saveQueue(next);
+    toast(wasQueued?"Removed from Queue":"Added to Queue");
+  });
   applyOverflowTooltips($("playerRows"));
 }
 function openPlayerProfile(id,source="drawer"){
@@ -650,6 +690,7 @@ function renderPresence(){
   const online=activePresence();
   $("presenceChip").textContent=`${online.length} online`;$("metricOnline").textContent=online.length;
   $("presenceList").innerHTML=online.length?online.map(entry=>`<div class="presence-row"><div class="presence-name"><span class="online-dot"></span><strong>${safe(entry.team)}</strong></div><span>${safe(entry.view||"Draft Board")}</span></div>`).join(""):`<div class="empty-state">No active members detected.</div>`;
+  renderBoard();
 }
 async function updatePresence(view=currentView,online=true){
   if(!auth.currentUser||!currentProfile)return;

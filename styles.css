@@ -219,3 +219,81 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(62,1
 .queue-player-name:hover{color:var(--blue);text-decoration:underline}
 .queue-draft-button{border:1px solid var(--blue);background:var(--blue);color:#fff;border-radius:8px;padding:7px 9px;font-size:10px;font-weight:950;white-space:nowrap}
 .queue-draft-button:disabled{opacity:.42;cursor:not-allowed}
+
+/* Milestone 6.6 final experience fixes */
+.owner-header-content{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  min-width:0;
+  max-width:100%
+}
+.owner-header-name{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap
+}
+.owner-online-dot{
+  width:8px;
+  height:8px;
+  flex:0 0 8px;
+  border-radius:50%;
+  background:#35c978;
+  box-shadow:0 0 0 2px rgba(255,255,255,.2)
+}
+
+.queue-row-main{
+  display:grid;
+  gap:5px
+}
+.queue-row-main span{
+  display:block;
+  margin-top:1px
+}
+
+/* Player profile must render above the queue overlay. */
+#playerModal{z-index:90}
+#queueModal{z-index:75}
+
+.quick-queue-button{
+  width:26px;
+  height:26px;
+  min-width:26px;
+  border:1px solid var(--line);
+  border-radius:8px;
+  background:#edf5fb;
+  color:var(--navy);
+  display:inline-grid;
+  place-items:center;
+  padding:0;
+  font-size:15px;
+  font-weight:950;
+  cursor:pointer;
+  vertical-align:middle;
+  margin-right:7px
+}
+.quick-queue-button:hover{
+  background:#dcecf8;
+  color:var(--blue)
+}
+.quick-queue-button.queued{
+  background:#e5f5ec;
+  border-color:#b8dec9;
+  color:var(--green)
+}
+.quick-queue-button:disabled{
+  opacity:.35;
+  cursor:not-allowed
+}
+.player-name-line{
+  display:flex;
+  align-items:flex-start;
+  min-width:0
+}
+.player-name-text{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap
+}
