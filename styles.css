@@ -121,3 +121,15 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(62,1
 @media(max-width:900px){
   .drawer-backdrop{inset:0}
 }
+
+/* Milestone 4: live drafting */
+.center-text{text-align:center}
+.player-table tbody tr.drafted{opacity:.5;background:#f3f6f8}
+.player-table tbody tr.drafted:hover{background:#f3f6f8}
+.drafted-label{display:inline-block;border-radius:999px;padding:4px 7px;background:#ece8f8;color:var(--purple);font-size:9px;font-weight:950}
+.pick-player-name{font-size:13px;font-weight:950;margin-top:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pick-player-meta{font-size:10px;color:var(--muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pick-tile.has-player{background:#fff}
+.pick-status-footer{position:absolute;left:0;right:0;bottom:0;height:20px;border-top:1px solid var(--line);background:#edf5fb;color:var(--muted);font-size:9px;font-weight:900;text-align:center;padding:3px 5px}
+.pick-tile.current .pick-status-footer{background:#dcecf8;color:var(--blue)}
+.player-modal-card .btn[disabled]{opacity:.45;cursor:not-allowed}

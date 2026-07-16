@@ -5,9 +5,9 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs,
-  serverTimestamp, query, orderBy, onSnapshot
+  serverTimestamp, query, orderBy, onSnapshot, runTransaction
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=310";
+import { firebaseConfig } from "./firebase-config.js?v=400";
 
 const TEAM_ACCOUNTS = [
   { team:"YoByronWatkins", email:"byronwatkins@gmail.com", draftPosition:1 },
@@ -36,11 +36,15 @@ const screens=["loadingScreen","authScreen","pendingScreen","rejectedScreen","ap
 let currentProfile=null;
 let liveDraftState=null;
 let unsubscribeDraft=null;
+let unsubscribeSelections=null;
+let draftSelections={};
 let players=[];
 let playerLevelFilter="ALL";
 let playerPositionFilter="ALL";
 let playerSortKey="fantasy_points";
 let playerSortDirection="desc";
+let selectedPlayerId=null;
+let commissionerDraftMode=null;
 
 function normalizeEmail(v){return String(v||"").trim().toLowerCase()}
 function accountForEmail(email){return TEAM_ACCOUNTS.find(x=>x.email===normalizeEmail(email))}
@@ -145,7 +149,10 @@ async function loadCurrentUser(user,manual=false){
     if(commissioner)await loadMemberDashboard();
   }catch(error){showOnly("authScreen");setMessage("authMessage",friendlyError(error),"error")}
 }
-function cleanupDraftListener(){if(unsubscribeDraft){unsubscribeDraft();unsubscribeDraft=null}}
+function cleanupDraftListener(){
+  if(unsubscribeDraft){unsubscribeDraft();unsubscribeDraft=null}
+  if(unsubscribeSelections){unsubscribeSelections();unsubscribeSelections=null}
+}
 
 function subscribeToDraft(){
   cleanupDraftListener();
@@ -155,10 +162,18 @@ function subscribeToDraft(){
     $("connectionChip").textContent="Live";$("connectionChip").classList.add("live");
     liveDraftState=snap.exists()?snap.data():null;
     renderDraftState();
+    if(selectedPlayerId)updatePlayerDraftButton();
   },error=>{
     $("connectionChip").textContent="Connection error";
     setMessage("draftControlMessage",friendlyError(error),"error");
   });
+  unsubscribeSelections=onSnapshot(collection(db,"draftSelections"),snapshot=>{
+    draftSelections={};
+    snapshot.docs.forEach(d=>{const data=d.data();draftSelections[String(data.pickIndex)]={id:d.id,...data}});
+    renderDraftState();
+    renderPlayerRows();
+    if(selectedPlayerId)updatePlayerDraftButton();
+  },error=>{console.error(error);toast("Draft selections could not be synchronized")});
 }
 function currentOwnerForPick(index){
   const storedOwners=liveDraftState?.pickOwners;
@@ -179,38 +194,27 @@ function openTradeDetail(index){
 }
 window.openC2CTradeDetail=openTradeDetail;
 
+function playerById(id){return players.find(player=>player.id===id)}
+function draftedPlayerIds(){return new Set(Object.values(draftSelections).map(selection=>selection.playerId))}
 function renderBoard(){
   const html=[];
   const currentColumn=liveDraftState?.initialized&&liveDraftState.currentPick<TOTAL_PICKS
     ? columnForOverallPick(liveDraftState.currentPick):null;
-
   for(let col=0;col<12;col++){
-    html.push(`<div class="owner-header ${currentColumn===col?"on-clock":""}" style="grid-column:${col+1};grid-row:1">
-      ${BASE_ORDER[col]}
-    </div>`);
+    html.push(`<div class="owner-header ${currentColumn===col?"on-clock":""}" style="grid-column:${col+1};grid-row:1">${BASE_ORDER[col]}</div>`);
   }
-
   for(let round=0;round<6;round++){
     for(let col=0;col<12;col++){
       const index=overallIndexForCell(round,col);
-      const status=!liveDraftState?.initialized?"Waiting":
-        index<liveDraftState.currentPick?"Passed":
-        index===liveDraftState.currentPick?"On the clock":"Upcoming";
-      const originalOwner=ownerForOverallPick(index);
-      const currentOwner=currentOwnerForPick(index);
-      const traded=currentOwner!==originalOwner;
-      const detail=tradeDetailForPick(index);
-
-      html.push(`<div class="pick-tile ${index===liveDraftState?.currentPick?"current":""} ${index<(liveDraftState?.currentPick??0)?"past":""} ${traded?"traded":""}"
-        style="grid-column:${col+1};grid-row:${round+2}">
-        <div class="pick-topline">
-          <div class="pick-label">Pick #${index+1}</div>
-          ${traded?`<div class="traded-to">To: ${safe(currentOwner)}</div>`:""}
-        </div>
-        <div class="empty-pick">${status}</div>
-        ${traded?`<button class="trade-detail-footer" type="button" ${detail?`onclick="openC2CTradeDetail(${index})"`:"disabled"}>
-          ${detail?"View trade details":"Trade details will appear here"}
-        </button>`:""}
+      const selection=draftSelections[String(index)];
+      const player=selection?playerById(selection.playerId):null;
+      const status=!liveDraftState?.initialized?"Waiting":index<liveDraftState.currentPick?"Complete":index===liveDraftState.currentPick?"On the clock":"Upcoming";
+      const originalOwner=ownerForOverallPick(index),currentOwner=currentOwnerForPick(index);
+      const traded=currentOwner!==originalOwner,detail=tradeDetailForPick(index);
+      html.push(`<div class="pick-tile ${index===liveDraftState?.currentPick?"current":""} ${index<(liveDraftState?.currentPick??0)?"past":""} ${traded?"traded":""} ${player?"has-player":""}" style="grid-column:${col+1};grid-row:${round+2}">
+        <div class="pick-topline"><div class="pick-label">Pick #${index+1}</div>${traded?`<div class="traded-to">To: ${safe(currentOwner)}</div>`:""}</div>
+        ${player?`<div class="pick-player-name">${safe(player.name)}</div><div class="pick-player-meta">${safe(player.position)} • ${safe(player.team||player.school||"—")}</div>`:`<div class="empty-pick">${status}</div>`}
+        ${traded?`<button class="trade-detail-footer" type="button" ${detail?`onclick="openC2CTradeDetail(${index})"`:"disabled"}>${detail?"View trade details":"Trade details will appear here"}</button>`:`<div class="pick-status-footer">${status}</div>`}
       </div>`);
     }
   }
@@ -248,8 +252,8 @@ async function writeDraftState(data){
 $("initializeDraft").onclick=async()=>{
   if(liveDraftState?.initialized&&!confirm("The draft is already initialized. Reinitialize at Pick #1?"))return;
   await setDoc(doc(db,...DRAFT_STATE_REF_PATH),{
-    initialized:true,status:"running",currentPick:0,totalPicks:TOTAL_PICKS,
-    rounds:6,teams:BASE_ORDER,createdAt:serverTimestamp(),updatedAt:serverTimestamp(),updatedBy:auth.currentUser.uid
+    initialized:true,status:"running",currentPick:0,currentOwner:ownerForOverallPick(0),totalPicks:TOTAL_PICKS,
+    rounds:6,teams:BASE_ORDER,pickOwners:Array.from({length:TOTAL_PICKS},(_,i)=>ownerForOverallPick(i)),createdAt:serverTimestamp(),updatedAt:serverTimestamp(),updatedBy:auth.currentUser.uid
   });
   toast("Draft initialized");
 };
@@ -258,22 +262,25 @@ $("pauseResumeDraft").onclick=async()=>{
   const status=liveDraftState.status==="paused"?"running":"paused";
   await writeDraftState({status});toast(status==="paused"?"Draft paused":"Draft resumed");
 };
-$("advancePick").onclick=async()=>{
-  if(!liveDraftState?.initialized)return toast("Initialize the draft first");
-  const next=Math.min(TOTAL_PICKS,(liveDraftState.currentPick??0)+1);
-  await writeDraftState({currentPick:next,status:next>=TOTAL_PICKS?"complete":liveDraftState.status==="paused"?"paused":"running"});
-};
-$("previousPick").onclick=async()=>{
-  if(!liveDraftState?.initialized)return toast("Initialize the draft first");
-  await writeDraftState({currentPick:Math.max(0,(liveDraftState.currentPick??0)-1),status:"paused"});
-};
+
 $("resetDraftState").onclick=async()=>{
-  if(!confirm("Reset the live draft to an uninitialized state?"))return;
-  await setDoc(doc(db,...DRAFT_STATE_REF_PATH),{
-    initialized:false,status:"waiting",currentPick:0,totalPicks:TOTAL_PICKS,
-    rounds:6,teams:BASE_ORDER,updatedAt:serverTimestamp(),updatedBy:auth.currentUser.uid
-  });
-  toast("Live draft state reset");
+  if(!confirm("Reset the entire draft and remove every selection?"))return;
+  try{
+    const snapshot=await getDocs(collection(db,"draftSelections"));
+    for(const selectionDoc of snapshot.docs){
+      const data=selectionDoc.data();
+      await runTransaction(db,async transaction=>{
+        transaction.delete(selectionDoc.ref);
+        transaction.delete(doc(db,"playerLocks",data.playerId));
+      });
+    }
+    await setDoc(doc(db,...DRAFT_STATE_REF_PATH),{
+      initialized:false,status:"waiting",currentPick:0,currentOwner:null,totalPicks:TOTAL_PICKS,
+      rounds:6,teams:BASE_ORDER,pickOwners:Array.from({length:TOTAL_PICKS},(_,i)=>ownerForOverallPick(i)),
+      updatedAt:serverTimestamp(),updatedBy:auth.currentUser.uid
+    });
+    commissionerDraftMode=null;toast("Entire draft reset");
+  }catch(error){toast(error.message||"Could not reset draft")}
 };
 
 $("commissionerToggle").onclick=$("commissionerRail").onclick=()=>{
@@ -392,39 +399,32 @@ function displayFantasyPoints(player){
 }
 function renderPlayerRows(){
   if(!$("playerRows"))return;
-  const list=filteredPlayers();
-  $("playerCountBadge").textContent=list.length;
-  $("playerRows").innerHTML=list.length?list.map(player=>`
-    <tr data-player-id="${safe(player.id)}">
-      <td class="player-name-cell"><strong>${safe(player.name)}</strong><span>${player.level==="NFL"?`Sleeper roster ${safe(player.source_roster)} • ${safe(player.roster_slot)}`:"Fantrax player pool"}</span></td>
+  const list=filteredPlayers(),drafted=draftedPlayerIds();
+  $("playerCountBadge").textContent=list.filter(player=>!drafted.has(player.id)).length;
+  $("playerRows").innerHTML=list.length?list.map(player=>{
+    const isDrafted=drafted.has(player.id);
+    const selection=Object.values(draftSelections).find(item=>item.playerId===player.id);
+    return `<tr class="${isDrafted?"drafted":""}" data-player-id="${safe(player.id)}">
+      <td class="player-name-cell"><strong>${safe(player.name)}</strong><span>${isDrafted?`Drafted Pick #${Number(selection.pickIndex)+1}`:(player.level==="NFL"?`Sleeper roster ${safe(player.source_roster)} • ${safe(player.roster_slot)}`:"Fantrax player pool")}</span></td>
       <td><span class="level-pill ${player.level.toLowerCase()}">${safe(player.level)}</span></td>
       <td><span class="position-pill">${safe(player.position)}</span></td>
-      <td>${safe(player.team||player.school||"—")}</td>
-      <td>${safe(player.class_year||"—")}</td>
-      <td class="${player.fantasy_points?"fp-value":"fp-pending"}">${displayFantasyPoints(player)}</td>
-    </tr>`).join(""):`<tr><td colspan="6">No players match the selected filters.</td></tr>`;
-  document.querySelectorAll("#playerRows tr[data-player-id]").forEach(row=>{
-    row.onclick=()=>openPlayerProfile(row.dataset.playerId);
-  });
+      <td>${safe(player.team||player.school||"—")}</td><td>${safe(player.class_year||"—")}</td>
+      <td class="${player.fantasy_points?"fp-value":"fp-pending"}">${isDrafted?`<span class="drafted-label">DRAFTED</span>`:displayFantasyPoints(player)}</td>
+    </tr>`;
+  }).join(""):`<tr><td colspan="6">No players match the selected filters.</td></tr>`;
+  document.querySelectorAll("#playerRows tr[data-player-id]").forEach(row=>{row.onclick=()=>openPlayerProfile(row.dataset.playerId)});
 }
 function openPlayerProfile(id){
-  const player=players.find(x=>x.id===id);
-  if(!player)return;
-  $("playerModalLevel").textContent=`${player.level} player profile`;
-  $("playerModalName").textContent=player.name;
-  $("playerModalMeta").textContent=player.level==="NFL"
-    ? `${player.position} • ${player.team}`
-    : `${player.position} • ${player.team} • ${player.class_year||"Class not listed"}`;
-  $("playerModalPosition").textContent=player.position||"—";
-  $("playerModalTeam").textContent=player.team||player.school||"—";
-  $("playerModalClass").textContent=player.class_year||"Not listed";
-  $("playerModalFP").textContent=displayFantasyPoints(player);
-  $("playerModalNote").textContent=player.level==="NFL"
-    ?"2025 PPR fantasy-point total from FantasyPros. This may differ from your Sleeper league because of custom scoring settings."
-    :"Fantasy-point total supplied by the Fantrax roster export.";
-  $("playerModal").classList.remove("hidden");
+  const player=players.find(x=>x.id===id);if(!player)return;
+  selectedPlayerId=id;
+  $("playerModalLevel").textContent=`${player.level} player profile`;$("playerModalName").textContent=player.name;
+  $("playerModalMeta").textContent=player.level==="NFL"?`${player.position} • ${player.team}`:`${player.position} • ${player.team} • ${player.class_year||"Class not listed"}`;
+  $("playerModalPosition").textContent=player.position||"—";$("playerModalTeam").textContent=player.team||player.school||"—";
+  $("playerModalClass").textContent=player.class_year||"Not listed";$("playerModalFP").textContent=displayFantasyPoints(player);
+  $("playerModalNote").textContent=player.level==="NFL"?"2025 PPR fantasy-point total from FantasyPros. This may differ from your Sleeper league because of custom scoring settings.":"Fantasy-point total supplied by the Fantrax roster export.";
+  updatePlayerDraftButton();$("playerModal").classList.remove("hidden");
 }
-function closePlayerProfile(){$("playerModal").classList.add("hidden")}
+function closePlayerProfile(){$("playerModal").classList.add("hidden");selectedPlayerId=null}
 
 function closePlayerDrawer(){
   $("playerDrawer").classList.remove("open");
@@ -471,6 +471,70 @@ document.querySelectorAll("[data-position]").forEach(button=>button.onclick=()=>
 });
 
 
+function currentPickOwner(){
+  if(!liveDraftState?.initialized||liveDraftState.currentPick>=TOTAL_PICKS)return null;
+  return liveDraftState.currentOwner||currentOwnerForPick(liveDraftState.currentPick);
+}
+function normalDraftAllowed(){
+  return currentProfile&&liveDraftState?.initialized&&liveDraftState.status==="running"&&liveDraftState.currentPick<TOTAL_PICKS&&currentProfile.team===currentPickOwner();
+}
+function updatePlayerDraftButton(){
+  if(!$("draftPlayerButton"))return;
+  const player=playerById(selectedPlayerId),drafted=player&&draftedPlayerIds().has(player.id);
+  const editing=currentProfile?.role==="commissioner"&&commissionerDraftMode?.type==="edit";
+  const forcing=currentProfile?.role==="commissioner"&&commissionerDraftMode?.type==="force";
+  const allowed=!drafted&&(editing||forcing||normalDraftAllowed());
+  $("draftPlayerButton").disabled=!allowed;
+  if(drafted){$("draftPlayerButton").textContent="Player Already Drafted";$("draftPlayerHint").textContent="This player is no longer available."}
+  else if(editing){$("draftPlayerButton").textContent="Save Replacement Player";$("draftPlayerHint").textContent=`Replace Pick #${commissionerDraftMode.pickIndex+1}.`}
+  else if(forcing){$("draftPlayerButton").textContent="Force Draft Player";$("draftPlayerHint").textContent=`Force Pick #${liveDraftState.currentPick+1} for ${currentPickOwner()}.`}
+  else if(normalDraftAllowed()){$("draftPlayerButton").textContent="Draft Player";$("draftPlayerHint").textContent=`Draft for ${currentPickOwner()} at Pick #${liveDraftState.currentPick+1}.`}
+  else if(liveDraftState?.status==="paused"){$("draftPlayerButton").textContent="Draft Paused";$("draftPlayerHint").textContent="The commissioner must resume the draft."}
+  else{$("draftPlayerButton").textContent="Not Your Pick";$("draftPlayerHint").textContent=currentPickOwner()?`${currentPickOwner()} is on the clock.`:"The draft is not ready."}
+}
+async function saveDraftSelection(){
+  const player=playerById(selectedPlayerId);if(!player)return;
+  const editMode=currentProfile?.role==="commissioner"&&commissionerDraftMode?.type==="edit";
+  const forceMode=currentProfile?.role==="commissioner"&&commissionerDraftMode?.type==="force";
+  if(!editMode&&!forceMode&&!normalDraftAllowed())return;
+  const targetIndex=editMode?commissionerDraftMode.pickIndex:liveDraftState.currentPick;
+  const owner=currentOwnerForPick(targetIndex);
+  try{
+    await runTransaction(db,async transaction=>{
+      const draftRef=doc(db,...DRAFT_STATE_REF_PATH),pickRef=doc(db,"draftSelections",String(targetIndex)),lockRef=doc(db,"playerLocks",player.id);
+      const draftSnap=await transaction.get(draftRef),pickSnap=await transaction.get(pickRef),lockSnap=await transaction.get(lockRef);
+      if(!draftSnap.exists())throw new Error("Draft state not found.");
+      const state=draftSnap.data();
+      if(lockSnap.exists())throw new Error("This player has already been drafted.");
+      if(editMode){if(pickSnap.exists())throw new Error("Remove the existing pick before replacing it.")}
+      else{
+        if(state.currentPick!==targetIndex)throw new Error("The pick changed. Reopen the player card.");
+        if(pickSnap.exists())throw new Error("This pick already has a selection.");
+        if(!forceMode&&state.status!=="running")throw new Error("The draft is paused.");
+      }
+      const selection={pickIndex:targetIndex,pickNumber:targetIndex+1,playerId:player.id,playerName:player.name,playerPosition:player.position,playerTeam:player.team||player.school||"",ownerTeam:owner,draftedByUid:auth.currentUser.uid,draftedByTeam:currentProfile.team,forcedByCommissioner:forceMode,draftedAt:serverTimestamp()};
+      transaction.set(pickRef,selection);transaction.set(lockRef,{playerId:player.id,pickIndex:targetIndex,draftedByUid:auth.currentUser.uid});
+      if(!editMode){const next=Math.min(TOTAL_PICKS,targetIndex+1);transaction.update(draftRef,{currentPick:next,currentOwner:next<TOTAL_PICKS?currentOwnerForPick(next):null,status:next>=TOTAL_PICKS?"complete":"running",updatedAt:serverTimestamp(),updatedBy:auth.currentUser.uid})}
+    });
+    commissionerDraftMode=null;closePlayerProfile();toast(`${player.name} drafted`);
+  }catch(error){console.error(error);toast(error.message||"Player could not be drafted")}
+}
+$("draftPlayerButton").onclick=saveDraftSelection;
+async function undoLastPick(){
+  const completed=Object.values(draftSelections).sort((a,b)=>b.pickIndex-a.pickIndex);if(!completed.length)return toast("There are no picks to undo");
+  const last=completed[0];if(!confirm(`Undo Pick #${last.pickIndex+1}: ${last.playerName}?`))return;
+  try{await runTransaction(db,async transaction=>{transaction.delete(doc(db,"draftSelections",String(last.pickIndex)));transaction.delete(doc(db,"playerLocks",last.playerId));transaction.update(doc(db,...DRAFT_STATE_REF_PATH),{currentPick:last.pickIndex,currentOwner:currentOwnerForPick(last.pickIndex),status:"paused",updatedAt:serverTimestamp(),updatedBy:auth.currentUser.uid})});toast("Last pick undone. Draft paused.")}
+  catch(error){toast(error.message||"Could not undo pick")}
+}
+async function editPick(){
+  const completed=Object.values(draftSelections).sort((a,b)=>a.pickIndex-b.pickIndex);if(!completed.length)return toast("There are no picks to edit");
+  const response=prompt("Enter the overall pick number to edit:",String(completed.at(-1).pickIndex+1));if(response===null)return;
+  const target=completed.find(x=>x.pickIndex===Number(response)-1);if(!target)return toast("That completed pick was not found");
+  if(!confirm(`Replace ${target.playerName} at Pick #${target.pickIndex+1}?`))return;
+  try{await runTransaction(db,async transaction=>{transaction.delete(doc(db,"draftSelections",String(target.pickIndex)));transaction.delete(doc(db,"playerLocks",target.playerId));transaction.update(doc(db,...DRAFT_STATE_REF_PATH),{status:"paused",updatedAt:serverTimestamp(),updatedBy:auth.currentUser.uid})});commissionerDraftMode={type:"edit",pickIndex:target.pickIndex};$("playerDrawer").classList.add("open");updateDrawerBackdrop();toast("Choose the replacement player")}
+  catch(error){toast(error.message||"Could not edit pick")}
+}
+
 document.querySelectorAll("[data-sort]").forEach(button=>{
   button.addEventListener("click",()=>{
     const key=button.dataset.sort;
@@ -501,9 +565,15 @@ document.addEventListener("click",event=>{
     ||$("commissionerRail").contains(event.target)
     ||(!$("commissionerToggle").classList.contains("hidden")&&$("commissionerToggle").contains(event.target));
 
-  if(playerOpen&&!insidePlayer)closePlayerDrawer();
+  const modalOpen=!$("playerModal").classList.contains("hidden");
+  if(playerOpen&&!modalOpen&&!insidePlayer)closePlayerDrawer();
   if(commissionerOpen&&!insideCommissioner)closeCommissionerDrawer();
 });
 
+
+$("advancePick").textContent="Force Pick";$("previousPick").textContent="Undo Last Pick";
+$("advancePick").onclick=()=>{if(!liveDraftState?.initialized)return toast("Initialize the draft first");commissionerDraftMode={type:"force"};$("playerDrawer").classList.add("open");updateDrawerBackdrop();toast("Select a player to force this pick")};
+$("previousPick").onclick=undoLastPick;
+const editButton=document.createElement("button");editButton.id="editCompletedPick";editButton.className="btn";editButton.textContent="Edit Pick";editButton.onclick=editPick;$("resetDraftState").before(editButton);
 
 onAuthStateChanged(auth,user=>user?loadCurrentUser(user):loadCurrentUser(null));
