@@ -16,10 +16,14 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
-    function isApprovedCommissioner() {
+    function isApprovedUser() {
       return signedIn() &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        currentUserDoc().data.status == "approved" &&
+        currentUserDoc().data.status == "approved";
+    }
+
+    function isApprovedCommissioner() {
+      return isApprovedUser() &&
         currentUserDoc().data.role == "commissioner";
     }
 
@@ -63,7 +67,12 @@ service cloud.firestore {
         );
 
       allow update: if isApprovedCommissioner();
+      allow delete: if false;
+    }
 
+    match /draft/main {
+      allow read: if isApprovedUser();
+      allow create, update: if isApprovedCommissioner();
       allow delete: if false;
     }
 
