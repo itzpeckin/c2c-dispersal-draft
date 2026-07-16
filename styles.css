@@ -136,3 +136,36 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(62,1
 
 /* Milestone 4.1 */
 .assumed-team-chip{display:inline-block;margin-left:7px;padding:4px 8px;border-radius:999px;background:#e9e4fb;color:var(--purple);font-size:10px;font-weight:950}
+
+/* Milestone 5: Trade Center */
+.trade-rail{position:fixed;right:0;top:270px;z-index:31;border:0;background:var(--purple);color:#fff;padding:12px 9px;border-radius:12px 0 0 12px;writing-mode:vertical-rl;transform:rotate(180deg);font-weight:950;box-shadow:var(--shadow)}
+.rail-badge{display:inline-grid;place-items:center;min-width:20px;height:20px;margin-top:7px;padding:0 5px;border-radius:999px;background:#fff;color:var(--purple);font-size:10px}
+.trade-drawer{position:fixed;top:72px;right:0;width:min(720px,96vw);height:calc(100vh - 72px);background:#f8fbfe;border-left:1px solid var(--line);box-shadow:var(--shadow);z-index:42;transform:translateX(105%);transition:.25s;overflow:auto}
+.trade-drawer.open{transform:translateX(0)}
+.trade-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;padding:10px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:75px;z-index:2}
+.trade-tab{border:1px solid var(--line);background:#e7eff5;color:var(--navy);border-radius:9px;padding:9px 7px;font-size:11px;font-weight:950}
+.trade-tab.active{background:var(--purple);border-color:var(--purple);color:#fff}
+.trade-tab span{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 4px;margin-left:3px;border-radius:999px;background:rgba(255,255,255,.2)}
+.trade-panel{padding:15px}
+.trade-columns{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}
+.trade-asset-column{border:1px solid var(--line);border-radius:13px;background:#fff;overflow:hidden}
+.trade-column-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 12px;background:#edf5fb;border-bottom:1px solid var(--line)}
+.trade-column-head h3{margin:0;font-size:14px}.trade-column-head span{font-size:10px}
+.trade-asset-list{max-height:330px;overflow:auto;padding:8px;display:grid;gap:6px}
+.trade-asset{display:flex;align-items:flex-start;gap:8px;padding:9px;border:1px solid #dce7ef;border-radius:9px;background:#fff;cursor:pointer}
+.trade-asset:hover{background:#f0f7fc}.trade-asset input{width:auto;margin-top:2px}
+.trade-asset-main{display:grid;gap:2px}.trade-asset-main strong{font-size:12px}.trade-asset-main span{font-size:10px;color:var(--muted)}
+.trade-empty{padding:18px;text-align:center;color:var(--muted);font-size:12px}
+.trade-offer-list{display:grid;gap:11px}
+.trade-offer-card{border:1px solid var(--line);border-radius:14px;background:#fff;overflow:hidden}
+.trade-offer-head{display:flex;justify-content:space-between;gap:12px;padding:12px;background:#edf5fb;border-bottom:1px solid var(--line)}
+.trade-offer-head h3{margin:0;font-size:15px}
+.trade-status{border-radius:999px;padding:5px 8px;font-size:9px;font-weight:950;text-transform:uppercase}
+.trade-status.pending{background:#fff1c9;color:#755800}.trade-status.accepted{background:#dff2e8;color:#216e49}.trade-status.declined,.trade-status.cancelled{background:#f5e3e6;color:#913a46}.trade-status.reverted{background:#e9e4fb;color:#59499a}
+.trade-offer-body{padding:12px;display:grid;gap:10px}
+.trade-side{border:1px solid #e1e9f0;border-radius:10px;padding:10px}.trade-side h4{margin:0 0 6px}.trade-side ul{margin:0;padding-left:18px}.trade-side li{margin:3px 0;font-size:12px}
+.trade-note{padding:9px;border-radius:9px;background:#f7fafc;color:var(--muted);font-size:12px}
+.trade-actions{display:flex;gap:7px;flex-wrap:wrap;padding:0 12px 12px}
+.trade-detail-card{width:min(620px,100%)}textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px;font:inherit;resize:vertical}
+@media(max-width:900px){.trade-drawer{top:0;height:100vh}.trade-tabs{top:75px}.trade-columns{grid-template-columns:1fr}.trade-asset-list{max-height:220px}}
+@media(max-width:560px){.trade-tabs{grid-template-columns:1fr 1fr}.trade-drawer{width:100vw}.trade-rail{top:250px}}

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#17324d">
   <title>C2C Dispersal Draft</title>
-  <link rel="stylesheet" href="./styles.css?v=410">
+  <link rel="stylesheet" href="./styles.css?v=500">
 </head>
 <body>
   <div id="loadingScreen" class="screen center-screen">
@@ -182,6 +182,63 @@
       </div>
     </div>
 
+
+    <button id="tradeRail" class="trade-rail">Trade Center <span id="tradeOfferBadge" class="rail-badge hidden">0</span></button>
+
+    <aside id="tradeDrawer" class="trade-drawer">
+      <div class="drawer-head">
+        <div>
+          <p class="eyebrow">Live asset trading</p>
+          <h2>Trade Center</h2>
+        </div>
+        <button id="closeTradeDrawer" class="icon-btn">×</button>
+      </div>
+
+      <div class="trade-tabs">
+        <button class="trade-tab active" type="button" data-trade-tab="propose">Propose</button>
+        <button class="trade-tab" type="button" data-trade-tab="received">Received <span id="receivedTradeCount">0</span></button>
+        <button class="trade-tab" type="button" data-trade-tab="sent">Sent <span id="sentTradeCount">0</span></button>
+        <button class="trade-tab commissioner-trade-tab hidden" type="button" data-trade-tab="history">History</button>
+      </div>
+
+      <section id="tradeProposePanel" class="trade-panel">
+        <label>Trade partner
+          <select id="tradePartnerSelect"></select>
+        </label>
+
+        <div class="trade-columns">
+          <div class="trade-asset-column">
+            <div class="trade-column-head"><h3 id="myTradeAssetsTitle">Your assets</h3><span class="muted">Select zero or more</span></div>
+            <div id="myTradeAssets" class="trade-asset-list"></div>
+          </div>
+          <div class="trade-asset-column">
+            <div class="trade-column-head"><h3 id="theirTradeAssetsTitle">Their assets</h3><span class="muted">Select zero or more</span></div>
+            <div id="theirTradeAssets" class="trade-asset-list"></div>
+          </div>
+        </div>
+
+        <label>Optional note
+          <textarea id="tradeNote" rows="3" placeholder="Example: Other compensation is being sent through Sleeper."></textarea>
+        </label>
+
+        <button id="sendTradeOffer" class="btn primary full" type="button">Send Trade Offer</button>
+        <div id="tradeFormMessage" class="message hidden"></div>
+      </section>
+
+      <section id="tradeReceivedPanel" class="trade-panel hidden"><div id="receivedTradeOffers" class="trade-offer-list"></div></section>
+      <section id="tradeSentPanel" class="trade-panel hidden"><div id="sentTradeOffers" class="trade-offer-list"></div></section>
+      <section id="tradeHistoryPanel" class="trade-panel hidden"><div id="tradeHistoryList" class="trade-offer-list"></div></section>
+    </aside>
+
+    <div id="tradeDetailModal" class="player-modal hidden">
+      <div class="player-modal-card trade-detail-card">
+        <button id="closeTradeDetailModal" class="icon-btn modal-close">×</button>
+        <p class="eyebrow">Trade details</p>
+        <h2 id="tradeDetailTitle">Trade Details</h2>
+        <div id="tradeDetailBody"></div>
+      </div>
+    </div>
+
     <button id="commissionerRail" class="side-rail hidden">Commissioner</button>
 
     <aside id="commissionerDrawer" class="drawer">
@@ -239,6 +296,6 @@
   </div>
 
   <div id="toast" class="toast"></div>
-  <script type="module" src="./app.js?v=410"></script>
+  <script type="module" src="./app.js?v=500"></script>
 </body>
 </html>

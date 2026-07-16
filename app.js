@@ -5,9 +5,9 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs,
-  serverTimestamp, query, orderBy, onSnapshot, runTransaction
+  serverTimestamp, query, orderBy, onSnapshot, runTransaction, addDoc
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=410";
+import { firebaseConfig } from "./firebase-config.js?v=500";
 
 const TEAM_ACCOUNTS = [
   { team:"YoByronWatkins", email:"byronwatkins@gmail.com", draftPosition:1 },
@@ -46,6 +46,10 @@ let playerSortDirection="desc";
 let selectedPlayerId=null;
 let commissionerDraftMode=null;
 let assumedTeam=null;
+let tradeOffers=[];
+let tradeHistory=[];
+let unsubscribeTrades=null;
+let activeTradeTab="propose";
 
 function normalizeEmail(v){return String(v||"").trim().toLowerCase()}
 function accountForEmail(email){return TEAM_ACCOUNTS.find(x=>x.email===normalizeEmail(email))}
@@ -100,6 +104,7 @@ $("assumeIdentitySelect").onchange=()=>{
   }
   refreshSignedInIdentity();
   updatePlayerDraftButton();
+  renderTradeCenter();
 };
 
 $("registerTeam").innerHTML=`<option value="">Choose your assigned team</option>`+
@@ -177,6 +182,7 @@ async function loadCurrentUser(user,manual=false){
 function cleanupDraftListener(){
   if(unsubscribeDraft){unsubscribeDraft();unsubscribeDraft=null}
   if(unsubscribeSelections){unsubscribeSelections();unsubscribeSelections=null}
+  if(unsubscribeTrades){unsubscribeTrades();unsubscribeTrades=null}
 }
 
 function subscribeToDraft(){
@@ -197,8 +203,16 @@ function subscribeToDraft(){
     snapshot.docs.forEach(d=>{const data=d.data();draftSelections[String(data.pickIndex)]={id:d.id,...data}});
     renderDraftState();
     renderPlayerRows();
+    renderTradeCenter();
     if(selectedPlayerId)updatePlayerDraftButton();
   },error=>{console.error(error);toast("Draft selections could not be synchronized")});
+
+  unsubscribeTrades=onSnapshot(query(collection(db,"tradeOffers"),orderBy("createdAt","desc")),snapshot=>{
+    tradeOffers=snapshot.docs.map(d=>({id:d.id,...d.data()}));
+    tradeHistory=tradeOffers.filter(trade=>["accepted","reverted"].includes(trade.status));
+    renderTradeCenter();
+    renderDraftState();
+  },error=>{console.error(error);toast("Trade offers could not be synchronized")});
 }
 function currentOwnerForPick(index){
   const storedOwners=liveDraftState?.pickOwners;
@@ -206,19 +220,35 @@ function currentOwnerForPick(index){
   return ownerForOverallPick(index);
 }
 function tradeDetailForPick(index){
-  const details=liveDraftState?.tradeDetails;
-  if(!details) return null;
-  return Array.isArray(details) ? details[index] : details[String(index)] || null;
+  return tradeHistory.find(trade=>
+    trade.status==="accepted" &&
+    [...(trade.fromPicks||[]),...(trade.toPicks||[])].includes(index)
+  )||null;
+}
+function assetLabel(index){
+  const selection=draftSelections[String(index)];
+  const round=Math.floor(index/12)+1;
+  const pick=(index%12)+1;
+  return `Round ${round} Pick ${pick}${selection?` — ${selection.playerName}`:""}`;
+}
+function tradeSideHtml(team,picks){
+  return `<div class="trade-side"><h4>${safe(team)} sends</h4>${
+    picks?.length?`<ul>${picks.map(index=>`<li>${safe(assetLabel(index))}</li>`).join("")}</ul>`:
+    `<div class="muted">No draft assets</div>`
+  }</div>`;
 }
 function openTradeDetail(index){
-  const detail=tradeDetailForPick(index);
-  if(!detail) return;
-  const sent=(detail.sent || []).join(", ") || "No draft assets";
-  const received=(detail.received || []).join(", ") || "No draft assets";
-  alert(`Trade details for Pick #${index+1}\n\n${detail.fromTeam || "Original owner"} sent:\n${sent}\n\n${detail.toTeam || "New owner"} sent:\n${received}`);
+  const trade=tradeDetailForPick(index);
+  if(!trade)return;
+  $("tradeDetailTitle").textContent=`${trade.fromTeam} ↔ ${trade.toTeam}`;
+  $("tradeDetailBody").innerHTML=`
+    ${tradeSideHtml(trade.fromTeam,trade.fromPicks||[])}
+    ${tradeSideHtml(trade.toTeam,trade.toPicks||[])}
+    ${trade.note?`<div class="trade-note">${safe(trade.note)}</div>`:""}
+    <div class="trade-note"><strong>Status:</strong> ${safe(trade.status)}</div>`;
+  $("tradeDetailModal").classList.remove("hidden");
 }
 window.openC2CTradeDetail=openTradeDetail;
-
 function playerById(id){return players.find(player=>player.id===id)}
 function draftedPlayerIds(){return new Set(Object.values(draftSelections).map(selection=>selection.playerId))}
 function renderBoard(){
@@ -469,9 +499,10 @@ function updateDrawerBackdrop(){
     backdrop.addEventListener("click",()=>{
       closePlayerDrawer();
       closeCommissionerDrawer();
+      $("tradeDrawer").classList.remove("open");
     });
   }
-  const anyOpen=$("playerDrawer").classList.contains("open")||$("commissionerDrawer").classList.contains("open");
+  const anyOpen=$("playerDrawer").classList.contains("open")||$("commissionerDrawer").classList.contains("open")||$("tradeDrawer").classList.contains("open");
   backdrop.classList.toggle("show",anyOpen);
 }
 $("playerRail").onclick=()=>{
@@ -616,6 +647,168 @@ async function editPick(){
   catch(error){toast(error.message||"Could not edit pick")}
 }
 
+
+function effectiveTradeTeam(){return actingTeam()}
+function currentPickOwners(){
+  return Array.isArray(liveDraftState?.pickOwners)&&liveDraftState.pickOwners.length===TOTAL_PICKS
+    ? [...liveDraftState.pickOwners]
+    : Array.from({length:TOTAL_PICKS},(_,index)=>ownerForOverallPick(index));
+}
+function picksOwnedBy(team){
+  return currentPickOwners().map((owner,index)=>({owner,index})).filter(item=>item.owner===team);
+}
+function renderTradeAssets(containerId,team,side){
+  const assets=picksOwnedBy(team);
+  $(containerId).innerHTML=assets.length?assets.map(({index})=>`
+    <label class="trade-asset">
+      <input type="checkbox" data-trade-pick="${index}" data-trade-side="${side}">
+      <span class="trade-asset-main"><strong>${safe(assetLabel(index))}</strong><span>${draftSelections[String(index)]?"Completed drafted asset":"Future draft pick"}</span></span>
+    </label>`).join(""):`<div class="trade-empty">No draft assets.</div>`;
+}
+function populateTradePartnerOptions(){
+  const team=effectiveTradeTeam();
+  if(!team||!$("tradePartnerSelect"))return;
+  const prior=$("tradePartnerSelect").value;
+  $("tradePartnerSelect").innerHTML=BASE_ORDER.filter(other=>other!==team).map(other=>`<option value="${other}">${other}</option>`).join("");
+  if(prior&&prior!==team&&BASE_ORDER.includes(prior))$("tradePartnerSelect").value=prior;
+  renderTradeAssetSelectors();
+}
+function renderTradeAssetSelectors(){
+  const mine=effectiveTradeTeam(),theirs=$("tradePartnerSelect")?.value;
+  if(!mine||!theirs)return;
+  $("myTradeAssetsTitle").textContent=`${mine} sends`;
+  $("theirTradeAssetsTitle").textContent=`${theirs} sends`;
+  renderTradeAssets("myTradeAssets",mine,"from");
+  renderTradeAssets("theirTradeAssets",theirs,"to");
+}
+function selectedTradePicks(side){
+  return [...document.querySelectorAll(`[data-trade-side="${side}"]:checked`)].map(input=>Number(input.dataset.tradePick));
+}
+function tradeTime(trade){
+  const date=trade.createdAt?.toDate?.()||trade.acceptedAt?.toDate?.();
+  return date?date.toLocaleString():"Just now";
+}
+function renderOfferCard(trade,view){
+  const team=effectiveTradeTeam();
+  const accept=view==="received"&&trade.status==="pending"&&trade.toTeam===team;
+  const cancel=view==="sent"&&trade.status==="pending"&&trade.fromTeam===team;
+  const revert=currentProfile?.role==="commissioner"&&trade.status==="accepted";
+  return `<article class="trade-offer-card">
+    <div class="trade-offer-head"><div><h3>${safe(trade.fromTeam)} ↔ ${safe(trade.toTeam)}</h3><span class="muted">${safe(tradeTime(trade))}</span></div><span class="trade-status ${safe(trade.status)}">${safe(trade.status)}</span></div>
+    <div class="trade-offer-body">${tradeSideHtml(trade.fromTeam,trade.fromPicks||[])}${tradeSideHtml(trade.toTeam,trade.toPicks||[])}${trade.note?`<div class="trade-note">${safe(trade.note)}</div>`:""}</div>
+    <div class="trade-actions">
+      ${accept?`<button class="btn green" data-accept-trade="${trade.id}">Accept</button><button class="btn danger" data-decline-trade="${trade.id}">Decline</button>`:""}
+      ${cancel?`<button class="btn danger" data-cancel-trade="${trade.id}">Cancel Offer</button>`:""}
+      ${revert?`<button class="btn danger" data-revert-trade="${trade.id}">Revert Trade</button>`:""}
+    </div>
+  </article>`;
+}
+function renderTradeCenter(){
+  if(!$("tradePartnerSelect")||!currentProfile)return;
+  const team=effectiveTradeTeam();
+  if(!team)return;
+  populateTradePartnerOptions();
+
+  const received=tradeOffers.filter(trade=>trade.toTeam===team);
+  const sent=tradeOffers.filter(trade=>trade.fromTeam===team);
+  const receivedPending=received.filter(trade=>trade.status==="pending").length;
+  const sentPending=sent.filter(trade=>trade.status==="pending").length;
+
+  $("receivedTradeCount").textContent=receivedPending;
+  $("sentTradeCount").textContent=sentPending;
+  $("tradeOfferBadge").textContent=receivedPending;
+  $("tradeOfferBadge").classList.toggle("hidden",!receivedPending);
+  document.querySelectorAll(".commissioner-trade-tab").forEach(el=>el.classList.toggle("hidden",currentProfile.role!=="commissioner"));
+
+  $("receivedTradeOffers").innerHTML=received.length?received.map(t=>renderOfferCard(t,"received")).join(""):`<div class="empty-state">No received offers.</div>`;
+  $("sentTradeOffers").innerHTML=sent.length?sent.map(t=>renderOfferCard(t,"sent")).join(""):`<div class="empty-state">No sent offers.</div>`;
+  $("tradeHistoryList").innerHTML=tradeHistory.length?tradeHistory.map(t=>renderOfferCard(t,"history")).join(""):`<div class="empty-state">No accepted trades.</div>`;
+
+  document.querySelectorAll("[data-accept-trade]").forEach(button=>button.onclick=()=>acceptTrade(button.dataset.acceptTrade));
+  document.querySelectorAll("[data-decline-trade]").forEach(button=>button.onclick=()=>changeTradeStatus(button.dataset.declineTrade,"declined"));
+  document.querySelectorAll("[data-cancel-trade]").forEach(button=>button.onclick=()=>changeTradeStatus(button.dataset.cancelTrade,"cancelled"));
+  document.querySelectorAll("[data-revert-trade]").forEach(button=>button.onclick=()=>revertTrade(button.dataset.revertTrade));
+}
+function switchTradeTab(tab){
+  activeTradeTab=tab;
+  document.querySelectorAll("[data-trade-tab]").forEach(button=>button.classList.toggle("active",button.dataset.tradeTab===tab));
+  const panels={propose:"tradeProposePanel",received:"tradeReceivedPanel",sent:"tradeSentPanel",history:"tradeHistoryPanel"};
+  Object.entries(panels).forEach(([name,id])=>$(id).classList.toggle("hidden",name!==tab));
+}
+document.querySelectorAll("[data-trade-tab]").forEach(button=>button.onclick=()=>switchTradeTab(button.dataset.tradeTab));
+$("tradePartnerSelect").onchange=renderTradeAssetSelectors;
+$("tradeRail").onclick=()=>{
+  closePlayerDrawer();closeCommissionerDrawer();
+  $("tradeDrawer").classList.add("open");updateDrawerBackdrop();renderTradeCenter();
+};
+$("closeTradeDrawer").onclick=()=>{$("tradeDrawer").classList.remove("open");updateDrawerBackdrop()};
+$("closeTradeDetailModal").onclick=()=>$("tradeDetailModal").classList.add("hidden");
+$("tradeDetailModal").onclick=event=>{if(event.target===$("tradeDetailModal"))$("tradeDetailModal").classList.add("hidden")};
+
+$("sendTradeOffer").onclick=async()=>{
+  const fromTeam=effectiveTradeTeam(),toTeam=$("tradePartnerSelect").value;
+  const fromPicks=selectedTradePicks("from"),toPicks=selectedTradePicks("to");
+  const note=$("tradeNote").value.trim();
+  if(!fromPicks.length&&!toPicks.length)return setMessage("tradeFormMessage","Include at least one draft asset from either side.","error");
+  const owners=currentPickOwners();
+  if(fromPicks.some(index=>owners[index]!==fromTeam)||toPicks.some(index=>owners[index]!==toTeam))return setMessage("tradeFormMessage","One or more selected assets changed ownership. Refresh the form.","error");
+  try{
+    await addDoc(collection(db,"tradeOffers"),{fromTeam,toTeam,fromPicks,toPicks,note,status:"pending",createdByUid:auth.currentUser.uid,createdByTeam:fromTeam,createdAt:serverTimestamp(),updatedAt:serverTimestamp()});
+    $("tradeNote").value="";setMessage("tradeFormMessage","Trade offer sent.","success");switchTradeTab("sent");
+  }catch(error){setMessage("tradeFormMessage",friendlyError(error),"error")}
+};
+async function changeTradeStatus(id,status){
+  const trade=tradeOffers.find(item=>item.id===id),team=effectiveTradeTeam();
+  if(!trade)return;
+  try{
+    await updateDoc(doc(db,"tradeOffers",id),{status,updatedAt:serverTimestamp(),updatedByUid:auth.currentUser.uid,updatedByTeam:team});
+    toast(`Trade ${status}`);
+  }catch(error){toast(friendlyError(error))}
+}
+async function acceptTrade(id){
+  const trade=tradeOffers.find(item=>item.id===id),team=effectiveTradeTeam();
+  if(!trade||trade.status!=="pending"||trade.toTeam!==team)return;
+  if(!confirm(`Accept trade with ${trade.fromTeam}?`))return;
+  try{
+    await runTransaction(db,async transaction=>{
+      const tradeRef=doc(db,"tradeOffers",id),draftRef=doc(db,...DRAFT_STATE_REF_PATH);
+      const tradeSnap=await transaction.get(tradeRef),draftSnap=await transaction.get(draftRef);
+      if(!tradeSnap.exists()||tradeSnap.data().status!=="pending")throw new Error("This offer is no longer pending.");
+      const data=tradeSnap.data(),state=draftSnap.data(),owners=Array.isArray(state.pickOwners)&&state.pickOwners.length===TOTAL_PICKS?[...state.pickOwners]:Array.from({length:TOTAL_PICKS},(_,index)=>ownerForOverallPick(index));
+      if((data.fromPicks||[]).some(index=>owners[index]!==data.fromTeam))throw new Error(`${data.fromTeam} no longer owns every offered asset.`);
+      if((data.toPicks||[]).some(index=>owners[index]!==data.toTeam))throw new Error(`${data.toTeam} no longer owns every requested asset.`);
+      const beforeOwners={};
+      [...(data.fromPicks||[]),...(data.toPicks||[])].forEach(index=>beforeOwners[String(index)]=owners[index]);
+      (data.fromPicks||[]).forEach(index=>owners[index]=data.toTeam);
+      (data.toPicks||[]).forEach(index=>owners[index]=data.fromTeam);
+      const afterOwners=Object.fromEntries(Object.keys(beforeOwners).map(key=>[key,owners[Number(key)]]));
+      transaction.update(tradeRef,{status:"accepted",acceptedAt:serverTimestamp(),acceptedByUid:auth.currentUser.uid,acceptedByTeam:team,beforeOwners,afterOwners,updatedAt:serverTimestamp()});
+      transaction.update(draftRef,{pickOwners:owners,currentOwner:state.currentPick<TOTAL_PICKS?owners[state.currentPick]:null,updatedAt:serverTimestamp(),updatedBy:auth.currentUser.uid});
+    });
+    toast("Trade accepted");
+  }catch(error){toast(error.message||"Trade could not be accepted")}
+}
+async function revertTrade(id){
+  if(currentProfile?.role!=="commissioner")return;
+  const trade=tradeOffers.find(item=>item.id===id);
+  if(!trade||trade.status!=="accepted"||!confirm(`Revert trade between ${trade.fromTeam} and ${trade.toTeam}?`))return;
+  try{
+    await runTransaction(db,async transaction=>{
+      const tradeRef=doc(db,"tradeOffers",id),draftRef=doc(db,...DRAFT_STATE_REF_PATH);
+      const tradeSnap=await transaction.get(tradeRef),draftSnap=await transaction.get(draftRef);
+      if(!tradeSnap.exists()||tradeSnap.data().status!=="accepted")throw new Error("This trade cannot be reverted.");
+      const data=tradeSnap.data(),state=draftSnap.data(),owners=Array.isArray(state.pickOwners)&&state.pickOwners.length===TOTAL_PICKS?[...state.pickOwners]:Array.from({length:TOTAL_PICKS},(_,index)=>ownerForOverallPick(index));
+      const after=data.afterOwners||{},before=data.beforeOwners||{};
+      const blocked=Object.keys(after).filter(key=>owners[Number(key)]!==after[key]);
+      if(blocked.length)throw new Error(`Cannot revert because these assets changed hands again: ${blocked.map(key=>assetLabel(Number(key))).join(", ")}`);
+      Object.keys(before).forEach(key=>owners[Number(key)]=before[key]);
+      transaction.update(tradeRef,{status:"reverted",revertedAt:serverTimestamp(),revertedByUid:auth.currentUser.uid,revertedByTeam:actingTeam(),updatedAt:serverTimestamp()});
+      transaction.update(draftRef,{pickOwners:owners,currentOwner:state.currentPick<TOTAL_PICKS?owners[state.currentPick]:null,updatedAt:serverTimestamp(),updatedBy:auth.currentUser.uid});
+    });
+    toast("Trade reverted");
+  }catch(error){toast(error.message||"Trade could not be reverted")}
+}
+
 document.querySelectorAll("[data-sort]").forEach(button=>{
   button.addEventListener("click",()=>{
     const key=button.dataset.sort;
@@ -639,16 +832,19 @@ document.querySelectorAll("[data-sort]").forEach(button=>{
 document.addEventListener("click",event=>{
   const playerOpen=$("playerDrawer").classList.contains("open");
   const commissionerOpen=$("commissionerDrawer").classList.contains("open");
-  if(!playerOpen&&!commissionerOpen)return;
+  const tradeOpen=$("tradeDrawer").classList.contains("open");
+  if(!playerOpen&&!commissionerOpen&&!tradeOpen)return;
 
   const insidePlayer=$("playerDrawer").contains(event.target)||$("playerRail").contains(event.target);
   const insideCommissioner=$("commissionerDrawer").contains(event.target)
     ||$("commissionerRail").contains(event.target)
     ||(!$("commissionerToggle").classList.contains("hidden")&&$("commissionerToggle").contains(event.target));
+  const insideTrade=$("tradeDrawer").contains(event.target)||$("tradeRail").contains(event.target)||$("tradeDetailModal").contains(event.target);
 
   const modalOpen=!$("playerModal").classList.contains("hidden");
   if(playerOpen&&!modalOpen&&!insidePlayer)closePlayerDrawer();
   if(commissionerOpen&&!insideCommissioner)closeCommissionerDrawer();
+  if(tradeOpen&&!insideTrade){$("tradeDrawer").classList.remove("open");updateDrawerBackdrop()}
 });
 
 
