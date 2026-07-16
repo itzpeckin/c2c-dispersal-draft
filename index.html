@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#17324d">
   <title>C2C Dispersal Draft</title>
-  <link rel="stylesheet" href="./styles.css?v=101">
+  <link rel="stylesheet" href="./styles.css?v=202">
 </head>
 <body>
   <div id="loadingScreen" class="screen center-screen">
@@ -49,7 +49,7 @@
           <input id="registerPassword" type="password" required minlength="6" autocomplete="new-password">
         </label>
         <button class="btn primary full" type="submit">Create Account</button>
-        <p class="tiny muted">Use the email address assigned to your draft team. The commissioner must approve member accounts.</p>
+        <p class="tiny muted">Use the email assigned to your draft team. Peckin must approve member accounts.</p>
       </form>
 
       <div id="authMessage" class="message hidden"></div>
@@ -65,7 +65,6 @@
         <div><span>Requested team</span><strong id="pendingTeam">—</strong></div>
         <div><span>Status</span><strong>Pending commissioner approval</strong></div>
       </div>
-      <p class="muted">After Peckin approves your account, click the refresh button below.</p>
       <button id="pendingRefresh" class="btn primary full">Refresh My Access</button>
       <button class="btn full" data-signout>Sign Out</button>
     </div>
@@ -84,63 +83,89 @@
     <header class="topbar">
       <div>
         <div class="logo">C2C DISPERSAL DRAFT</div>
-        <div class="subtitle">Milestone 1 • Authentication</div>
+        <div class="subtitle">Live Draft Room</div>
+      </div>
+      <div class="draft-status-wrap">
+        <span id="liveStatusChip" class="status-chip waiting">Waiting for commissioner</span>
+        <span id="connectionChip" class="connection-chip">Connecting…</span>
       </div>
       <div class="spacer"></div>
       <div class="signed-in">
         <div><strong id="signedInTeam"></strong><span id="signedInEmail"></span></div>
+        <button id="commissionerToggle" class="btn small hidden">Commissioner</button>
         <button class="btn small" data-signout>Sign Out</button>
       </div>
     </header>
 
-    <main class="app-shell">
-      <section class="welcome-card">
-        <div class="status-icon">✓</div>
+    <main class="draft-shell">
+      <section class="draft-summary">
         <div>
-          <p class="eyebrow">Account approved</p>
-          <h1>Welcome to the C2C Draft Room</h1>
-          <p id="memberWelcome" class="muted"></p>
+          <p class="eyebrow">Currently on the clock</p>
+          <h1 id="onClockTeam">Draft not initialized</h1>
+          <p id="pickSummary" class="muted">The commissioner must initialize the live board.</p>
+        </div>
+        <div class="summary-number">
+          <span>Overall pick</span>
+          <strong id="overallPickDisplay">—</strong>
         </div>
       </section>
 
-      <section class="milestone-card">
-        <h2>Authentication is working</h2>
-        <div class="check-grid">
-          <div>✓ Email/password sign-in</div>
-          <div>✓ Team identity assigned</div>
-          <div>✓ Commissioner approval</div>
-          <div>✓ Firestore user record</div>
-        </div>
-        <p class="muted">The live draft board will be connected in the next milestone.</p>
+      <section id="pausedBanner" class="paused-banner hidden">
+        DRAFT PAUSED BY COMMISSIONER
       </section>
 
-      <section id="commissionerDashboard" class="commissioner-card hidden">
+      <section class="board-scroll">
+        <div id="draftBoard" class="draft-board"></div>
+      </section>
+    </main>
+
+    <button id="commissionerRail" class="side-rail hidden">Commissioner</button>
+
+    <aside id="commissionerDrawer" class="drawer">
+      <div class="drawer-head">
+        <div>
+          <p class="eyebrow">Commissioner only</p>
+          <h2>Draft Control Center</h2>
+        </div>
+        <button id="closeCommissioner" class="icon-btn">×</button>
+      </div>
+
+      <section class="drawer-section">
+        <h3>Live draft controls</h3>
+        <p class="muted">These buttons update every signed-in screen through Firestore.</p>
+        <div class="control-grid">
+          <button id="initializeDraft" class="btn primary">Initialize Draft</button>
+          <button id="pauseResumeDraft" class="btn green">Pause Draft</button>
+          <button id="advancePick" class="btn">Advance Pick</button>
+          <button id="previousPick" class="btn">Previous Pick</button>
+          <button id="resetDraftState" class="btn danger wide">Reset Live Draft State</button>
+        </div>
+        <div id="draftControlMessage" class="message hidden"></div>
+      </section>
+
+      <section class="drawer-section">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Commissioner only</p>
-            <h2>Member Account Approval</h2>
+            <p class="eyebrow">Milestone 1</p>
+            <h3>Member Account Approval</h3>
           </div>
-          <button id="refreshMembers" class="btn">Refresh</button>
+          <button id="refreshMembers" class="btn small">Refresh</button>
         </div>
-
         <div class="summary-grid">
           <div><span>Pending</span><strong id="pendingCount">0</strong></div>
           <div><span>Approved</span><strong id="approvedCount">0</strong></div>
-          <div><span>Available teams</span><strong id="availableCount">0</strong></div>
+          <div><span>Available</span><strong id="availableCount">0</strong></div>
         </div>
-
         <div id="memberMessage" class="message hidden"></div>
-
         <h3>Pending registrations</h3>
         <div id="pendingUsers" class="member-list"></div>
-
-        <h3>Approved league members</h3>
+        <h3>Approved members</h3>
         <div id="approvedUsers" class="member-list"></div>
       </section>
-    </main>
+    </aside>
   </div>
 
   <div id="toast" class="toast"></div>
-  <script type="module" src="./app.js?v=101"></script>
+  <script type="module" src="./app.js?v=202"></script>
 </body>
 </html>
