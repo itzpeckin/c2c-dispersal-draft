@@ -7,7 +7,7 @@ import {
   getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs,
   serverTimestamp, query, orderBy, onSnapshot, runTransaction, addDoc
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=680";
+import { firebaseConfig } from "./firebase-config.js?v=700";
 
 const TEAM_ACCOUNTS = [
   { team:"YoByronWatkins", email:"byronwatkins@gmail.com", draftPosition:1 },
@@ -235,11 +235,21 @@ function currentOwnerForPick(index){
   if(Array.isArray(storedOwners) && storedOwners[index]) return storedOwners[index];
   return ownerForOverallPick(index);
 }
+function allTradesForPick(index){
+  return tradeOffers
+    .filter(trade=>
+      ["accepted","reverted"].includes(trade.status) &&
+      [...(trade.fromPicks||[]),...(trade.toPicks||[])].includes(index)
+    )
+    .sort((a,b)=>{
+      const at=a.acceptedAt?.toMillis?.()||a.createdAt?.toMillis?.()||0;
+      const bt=b.acceptedAt?.toMillis?.()||b.createdAt?.toMillis?.()||0;
+      return at-bt;
+    });
+}
 function tradeDetailForPick(index){
-  return tradeHistory.find(trade=>
-    trade.status==="accepted" &&
-    [...(trade.fromPicks||[]),...(trade.toPicks||[])].includes(index)
-  )||null;
+  const history=allTradesForPick(index);
+  return history.length?history[history.length-1]:null;
 }
 function assetLabel(index){
   const selection=draftSelections[String(index)];
@@ -253,15 +263,26 @@ function tradeSideHtml(team,picks){
     `<div class="muted">No draft assets</div>`
   }</div>`;
 }
+function tradeDisplayTime(trade){
+  const date=trade.acceptedAt?.toDate?.()||trade.createdAt?.toDate?.();
+  return date?date.toLocaleString():"Trade recorded";
+}
 function openTradeDetail(index){
-  const trade=tradeDetailForPick(index);
-  if(!trade)return;
-  $("tradeDetailTitle").textContent=`${trade.fromTeam} ↔ ${trade.toTeam}`;
-  $("tradeDetailBody").innerHTML=`
-    ${tradeSideHtml(trade.fromTeam,trade.fromPicks||[])}
-    ${tradeSideHtml(trade.toTeam,trade.toPicks||[])}
-    ${trade.note?`<div class="trade-note">${safe(trade.note)}</div>`:""}
-    <div class="trade-note"><strong>Status:</strong> ${safe(trade.status)}</div>`;
+  const history=allTradesForPick(index);
+  if(!history.length)return;
+  $("tradeDetailTitle").textContent=`Trade History — ${assetLabel(index)}`;
+  $("tradeDetailBody").innerHTML=history.map((trade,position)=>`
+    <article class="trade-offer-card">
+      <div class="trade-offer-head">
+        <div><h3>Trade ${position+1}: ${safe(trade.fromTeam)} ↔ ${safe(trade.toTeam)}</h3><span class="muted">${safe(tradeDisplayTime(trade))}</span></div>
+        <span class="trade-status ${safe(trade.status)}">${safe(trade.status)}</span>
+      </div>
+      <div class="trade-offer-body">
+        ${tradeSideHtml(trade.fromTeam,trade.fromPicks||[])}
+        ${tradeSideHtml(trade.toTeam,trade.toPicks||[])}
+        ${trade.note?`<div class="trade-note">${safe(trade.note)}</div>`:""}
+      </div>
+    </article>`).join("");
   $("tradeDetailModal").classList.remove("hidden");
 }
 window.openC2CTradeDetail=openTradeDetail;
@@ -288,11 +309,14 @@ function renderBoard(){
       const player=selection?playerById(selection.playerId):null;
       const status=!liveDraftState?.initialized?"Waiting":index<liveDraftState.currentPick?"Complete":index===liveDraftState.currentPick?"On the clock":"Upcoming";
       const originalOwner=ownerForOverallPick(index),currentOwner=currentOwnerForPick(index);
-      const traded=currentOwner!==originalOwner,detail=tradeDetailForPick(index);
-      html.push(`<div class="pick-tile ${index===liveDraftState?.currentPick?"current":""} ${index<(liveDraftState?.currentPick??0)?"past":""} ${traded?"traded":""} ${player?"has-player":""}" data-pick-index="${index}" style="grid-column:${col+1};grid-row:${round+2}">
+      const traded=currentOwner!==originalOwner;
+      const tradeHistoryForAsset=allTradesForPick(index);
+      const hasTradeHistory=tradeHistoryForAsset.length>0;
+      const detail=hasTradeHistory?tradeHistoryForAsset[tradeHistoryForAsset.length-1]:null;
+      html.push(`<div class="pick-tile ${index===liveDraftState?.currentPick?"current":""} ${index<(liveDraftState?.currentPick??0)?"past":""} ${traded?"traded":""} ${hasTradeHistory?"has-trade-history":""} ${player?"has-player":""}" data-pick-index="${index}" style="grid-column:${col+1};grid-row:${round+2}">
         <div class="pick-topline"><div class="pick-label">Pick #${index+1}</div>${traded?`<div class="traded-to" data-full-text="To: ${safe(currentOwner)}">To: ${safe(currentOwner)}</div>`:""}</div>
         ${player?`<div class="pick-player-name" data-full-text="${safe(player.name)}">${safe(player.name)}</div><div class="pick-player-meta" data-full-text="${safe(player.position)} • ${safe(player.team||player.school||"—")}">${safe(player.position)} • ${safe(player.team||player.school||"—")}</div>`:`<div class="empty-pick">${status}</div>`}
-        ${traded?`<button class="trade-detail-footer" type="button" ${detail?`onclick="openC2CTradeDetail(${index})"`:"disabled"}>${detail?"View trade details":"Trade details will appear here"}</button>`:(player?`<div class="pick-status-footer">${status}</div>`:"")}
+        ${hasTradeHistory?`<button class="trade-detail-footer ${traded?"":"history-only"}" type="button" onclick="openC2CTradeDetail(${index})">View trade details (${tradeHistoryForAsset.length})</button>`:(player?`<div class="pick-status-footer">${status}</div>`:"")}
       </div>`);
     }
   }
@@ -517,7 +541,7 @@ function renderPlayerRows(){
           <strong class="player-name-text">${safe(player.name)}</strong>
           ${isDrafted?"":`<button class="quick-draft-button name-column" type="button" data-quick-draft="${safe(player.id)}" ${canQuickDraft?"":"disabled"}>Draft</button>`}
         </div>
-        <span>${isDrafted?safe(draftedText):(player.level==="NFL"?`Sleeper roster ${safe(player.source_roster)} • ${safe(player.roster_slot)}`:"Fantrax player pool")}</span>
+        ${isDrafted?`<span>${safe(draftedText)}</span>`:""}
       </td>
       <td><span class="level-pill ${player.level.toLowerCase()}">${safe(player.level)}</span></td>
       <td><span class="position-pill">${safe(player.position)}</span></td>
@@ -578,7 +602,10 @@ function openPlayerProfile(id,source="drawer"){
   $("playerModalMeta").textContent=player.level==="NFL"?`${player.position} • ${player.team}`:`${player.position} • ${player.team} • ${player.class_year||"Class not listed"}`;
   $("playerModalPosition").textContent=player.position||"—";$("playerModalTeam").textContent=player.team||player.school||"—";
   $("playerModalClass").textContent=player.class_year||"Not listed";$("playerModalFP").textContent=displayFantasyPoints(player);
-  $("playerModalNote").textContent=player.level==="NFL"?"2025 PPR fantasy-point total from FantasyPros. This may differ from your Sleeper league because of custom scoring settings.":"Fantasy-point total supplied by the Fantrax roster export.";
+  const draftedSelection=selectionForPlayer(player.id);
+  $("playerModalNote").textContent=draftedSelection
+    ?`${player.name} was drafted at Pick #${draftedSelection.pickIndex+1}. Current owner: ${currentOwnerForPick(draftedSelection.pickIndex)}.`
+    :(player.level==="NFL"?"2025 PPR fantasy-point total from FantasyPros. This may differ from your Sleeper league because of custom scoring settings.":"Fantasy-point total supplied by the Fantrax roster export.");
   renderDraftedPlayerInfo(player);
   updateQueuePlayerButton();
   updatePlayerDraftButton();$("playerModal").classList.remove("hidden");
@@ -661,11 +688,43 @@ function applyOverflowTooltips(root){
 }
 function renderDraftedPlayerInfo(player){
   const selection=selectionForPlayer(player.id),box=$("playerDraftedInfo");
-  if(!selection){box.classList.add("hidden");box.innerHTML="";return}
-  const currentOwner=currentOwnerForPick(selection.pickIndex),originalOwner=selection.ownerTeam||ownerForOverallPick(selection.pickIndex);
-  const relevant=tradeHistory.filter(trade=>[...(trade.fromPicks||[]),...(trade.toPicks||[])].includes(selection.pickIndex));
-  box.innerHTML=`<div class="drafted-info-grid"><div><span>Drafted at</span><strong>Pick #${selection.pickIndex+1}</strong></div><div><span>Drafted by</span><strong>${safe(originalOwner)}</strong></div><div><span>${currentOwner!==originalOwner?"Traded to":"Current owner"}</span><strong>${safe(currentOwner)}</strong></div></div>${relevant.length?`<div class="drafted-history">${relevant.length} trade record${relevant.length===1?"":"s"} attached to this asset.</div>`:""}`;
+  const historySection=$("playerTradeHistorySection"),historyList=$("playerTradeHistoryList");
+  if(!selection){
+    box.classList.add("hidden");box.innerHTML="";
+    if(historySection)historySection.classList.add("hidden");
+    if(historyList)historyList.innerHTML="";
+    return;
+  }
+
+  const currentOwner=currentOwnerForPick(selection.pickIndex);
+  const originalOwner=selection.ownerTeam||ownerForOverallPick(selection.pickIndex);
+  const relevant=allTradesForPick(selection.pickIndex);
+
+  box.innerHTML=`<div class="drafted-info-grid">
+    <div><span>Drafted at</span><strong>Pick #${selection.pickIndex+1}</strong></div>
+    <div><span>Drafted by</span><strong>${safe(originalOwner)}</strong></div>
+    <div><span>${currentOwner!==originalOwner?"Traded to":"Current owner"}</span><strong>${safe(currentOwner)}</strong></div>
+  </div>`;
   box.classList.remove("hidden");
+
+  if(!historySection||!historyList)return;
+  historySection.classList.toggle("hidden",!relevant.length);
+  historyList.innerHTML=relevant.map((trade,index)=>{
+    const key=String(selection.pickIndex);
+    const before=trade.beforeOwners?.[key]||"Unknown";
+    const after=trade.afterOwners?.[key]||"Unknown";
+    return `<div class="player-trade-entry">
+      <div class="player-trade-entry-head">
+        <strong>Trade ${index+1}: ${safe(before)} → ${safe(after)}</strong>
+        <span>${safe(tradeDisplayTime(trade))}</span>
+      </div>
+      <div class="player-trade-entry-assets">
+        <div>${safe(trade.fromTeam)} sent: ${(trade.fromPicks||[]).length?(trade.fromPicks||[]).map(assetLabel).map(safe).join(", "):"No draft assets"}</div>
+        <div>${safe(trade.toTeam)} sent: ${(trade.toPicks||[]).length?(trade.toPicks||[]).map(assetLabel).map(safe).join(", "):"No draft assets"}</div>
+      </div>
+      ${trade.note?`<div class="player-trade-entry-note">${safe(trade.note)}</div>`:""}
+    </div>`;
+  }).join("");
 }
 function effectiveQueueTeam(){return actingTeam()||currentProfile?.team||auth.currentUser?.uid}
 function queueContains(id){return queueItems.includes(id)}

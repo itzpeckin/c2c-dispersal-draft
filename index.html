@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#17324d">
   <title>C2C Dispersal Draft</title>
-  <link rel="stylesheet" href="./styles.css?v=680">
+  <link rel="stylesheet" href="./styles.css?v=700">
 </head>
 <body>
   <div id="loadingScreen" class="screen center-screen">
@@ -178,7 +178,13 @@
           <div><span>Class</span><strong id="playerModalClass"></strong></div>
           <div class="fp-card"><span>Previous Season Fantasy Points</span><strong id="playerModalFP"></strong></div>
         </div>
-        <p id="playerModalNote" class="muted"></p><div id="playerDraftedInfo" class="drafted-info hidden"></div>
+        <p id="playerModalNote" class="muted"></p>
+        <div id="playerDraftedInfo" class="drafted-info hidden"></div>
+        <section id="playerTradeHistorySection" class="player-trade-history hidden">
+          <p class="eyebrow">Asset movement</p>
+          <h3>Trade History</h3>
+          <div id="playerTradeHistoryList" class="player-trade-history-list"></div>
+        </section>
         <div id="playerModalActionArea">
           <div class="player-modal-actions"><button id="queuePlayerButton" class="btn" type="button">Add to Queue</button><button id="draftPlayerButton" class="btn primary" type="button">Draft Player</button></div>
           <p id="draftPlayerHint" class="tiny muted center-text"></p>
@@ -332,6 +338,6 @@
   </div>
 
   <div id="toast" class="toast"></div>
-  <script type="module" src="./app.js?v=680"></script>
+  <script type="module" src="./app.js?v=700"></script>
 </body>
 </html>

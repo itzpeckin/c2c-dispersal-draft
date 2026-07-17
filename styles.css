@@ -343,3 +343,16 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(62,1
 .player-row-actions{
   justify-content:flex-start!important
 }
+
+/* Final production: persistent asset trade history */
+.player-trade-history{margin-top:16px;border-top:1px solid var(--line);padding-top:15px}
+.player-trade-history h3{margin:4px 0 10px}
+.player-trade-history-list{display:grid;gap:9px}
+.player-trade-entry{border:1px solid var(--line);border-radius:11px;background:#f8fbfe;padding:10px}
+.player-trade-entry-head{display:flex;justify-content:space-between;gap:10px;margin-bottom:6px}
+.player-trade-entry-head strong{font-size:12px}
+.player-trade-entry-head span{font-size:10px;color:var(--muted)}
+.player-trade-entry-assets{display:grid;gap:4px;font-size:11px;color:var(--muted)}
+.player-trade-entry-note{margin-top:7px;padding:7px 8px;border-radius:8px;background:#edf5fb;font-size:11px;color:var(--muted)}
+.pick-tile.has-trade-history{padding-bottom:24px}
+.trade-detail-footer.history-only{background:#eee9fb;color:var(--purple)}
