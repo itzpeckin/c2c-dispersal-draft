@@ -7,21 +7,21 @@ import {
   getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs,
   serverTimestamp, query, orderBy, onSnapshot, runTransaction, addDoc
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=700";
+import { firebaseConfig } from "./firebase-config.js?v=690";
 
 const TEAM_ACCOUNTS = [
-  { team:"YoByronWatkins", email:"byronwatkins@gmail.com", draftPosition:1 },
+  { team:"YoByronWatkins", email:"byronwatkins@gmail.com", draftPosition:8 },
   { team:"erics2423", email:"erics2423@yahoo.com", draftPosition:2 },
-  { team:"BenMoore13", email:"biggtyme13@gmail.com", draftPosition:3 },
-  { team:"Vandorjp", email:"joevandorn@gmail.com", draftPosition:4 },
-  { team:"LouGarou", email:"nate.hagemann@gmail.com", draftPosition:5 },
-  { team:"BKnappy", email:"bronsonknapp13@gmail.com", draftPosition:6 },
-  { team:"Tsummers3", email:"trey.summers3@gmail.com", draftPosition:7 },
-  { team:"Peckin", email:"justinrmandaro@gmail.com", draftPosition:8, commissioner:true },
-  { team:"Jonredcorn08", email:"jstyner0425@email.campbell.edu", draftPosition:9 },
-  { team:"Jimmer44", email:"jmiakisz@gmail.com", draftPosition:10 },
-  { team:"PiratesJs", email:"bjcurrie12@gmail.com", draftPosition:11 },
-  { team:"CalBrewski", email:"caleb.ds.lucas@gmail.com", draftPosition:12 }
+  { team:"BenMoore13", email:"biggtyme13@gmail.com", draftPosition:11 },
+  { team:"Vandorjp", email:"joevandorn@gmail.com", draftPosition:5 },
+  { team:"LouGarou", email:"nate.hagemann@gmail.com", draftPosition:1 },
+  { team:"BKnappy", email:"bronsonknapp13@gmail.com", draftPosition:9 },
+  { team:"Tsummers3", email:"trey.summers3@gmail.com", draftPosition:12 },
+  { team:"Peckin", email:"justinrmandaro@gmail.com", draftPosition:7, commissioner:true },
+  { team:"Jonredcorn08", email:"jstyner0425@email.campbell.edu", draftPosition:10 },
+  { team:"Jimmer44", email:"jmiakisz@gmail.com", draftPosition:6 },
+  { team:"PiratesJs", email:"bjcurrie12@gmail.com", draftPosition:3 },
+  { team:"CalBrewski", email:"caleb.ds.lucas@gmail.com", draftPosition:4 }
 ];
 const BASE_ORDER = TEAM_ACCOUNTS.map(x=>x.team);
 const COMMISSIONER_EMAIL="justinrmandaro@gmail.com";
