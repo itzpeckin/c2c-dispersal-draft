@@ -7,7 +7,7 @@ import {
   getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs,
   serverTimestamp, query, orderBy, onSnapshot, runTransaction, addDoc
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=690";
+import { firebaseConfig } from "./firebase-config.js?v=691";
 
 const TEAM_ACCOUNTS = [
   { team:"YoByronWatkins", email:"byronwatkins@gmail.com", draftPosition:8 },
@@ -23,7 +23,7 @@ const TEAM_ACCOUNTS = [
   { team:"PiratesJs", email:"bjcurrie12@gmail.com", draftPosition:3 },
   { team:"CalBrewski", email:"caleb.ds.lucas@gmail.com", draftPosition:4 }
 ];
-const BASE_ORDER = TEAM_ACCOUNTS.map(x=>x.team);
+const BASE_ORDER = [...TEAM_ACCOUNTS].sort((a,b)=>a.draftPosition-b.draftPosition).map(x=>x.team);
 const COMMISSIONER_EMAIL="justinrmandaro@gmail.com";
 const TOTAL_PICKS=72;
 const DRAFT_STATE_REF_PATH=["draft","main"];
