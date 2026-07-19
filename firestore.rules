@@ -71,9 +71,79 @@ service cloud.firestore {
     }
 
     match /draft/main {
-      allow read: if isApprovedUser();
-      allow create, update: if isApprovedCommissioner();
+      allow read: if true;
+      allow create: if isApprovedCommissioner();
+      allow update: if isApprovedCommissioner() || (
+        isApprovedUser() &&
+        (
+          (
+            resource.data.status == "running" &&
+            resource.data.currentOwner == currentUserDoc().data.team &&
+            request.resource.data.currentPick == resource.data.currentPick + 1 &&
+            request.resource.data.updatedBy == request.auth.uid &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              "currentPick", "currentOwner", "status", "updatedAt", "updatedBy"
+            ])
+          ) ||
+          (
+            request.resource.data.updatedBy == request.auth.uid &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              "pickOwners", "currentOwner", "updatedAt", "updatedBy"
+            ])
+          )
+        )
+      );
       allow delete: if false;
+    }
+
+    match /draftSelections/{pickId} {
+      allow read: if true;
+      allow create: if isApprovedUser() &&
+        request.resource.data.draftedByUid == request.auth.uid &&
+        request.resource.data.pickIndex == get(/databases/$(database)/documents/draft/main).data.currentPick &&
+        request.resource.data.ownerTeam == get(/databases/$(database)/documents/draft/main).data.currentOwner &&
+        (isApprovedCommissioner() || currentUserDoc().data.team == get(/databases/$(database)/documents/draft/main).data.currentOwner);
+      allow update: if false;
+      allow delete: if isApprovedCommissioner();
+    }
+
+    match /playerLocks/{playerId} {
+      allow read: if isApprovedUser();
+      allow create: if isApprovedUser() && request.resource.data.draftedByUid == request.auth.uid;
+      allow update: if false;
+      allow delete: if isApprovedCommissioner();
+    }
+
+    match /tradeOffers/{tradeId} {
+      allow read: if true;
+
+      allow create: if isApprovedUser() &&
+        request.resource.data.status == "pending" &&
+        request.resource.data.createdByUid == request.auth.uid &&
+        (isApprovedCommissioner() || request.resource.data.fromTeam == currentUserDoc().data.team);
+
+      allow update: if isApprovedCommissioner() || (
+        isApprovedUser() &&
+        resource.data.status == "pending" &&
+        (
+          (resource.data.toTeam == currentUserDoc().data.team && request.resource.data.status in ["accepted", "declined"]) ||
+          (resource.data.fromTeam == currentUserDoc().data.team && request.resource.data.status == "cancelled")
+        )
+      );
+
+      allow delete: if isApprovedCommissioner();
+    }
+
+    match /queues/{teamId} {
+      allow read, create, update, delete: if isApprovedUser() && (
+        isApprovedCommissioner() ||
+        currentUserDoc().data.team == teamId
+      );
+    }
+
+    match /presence/{uid} {
+      allow read: if isApprovedUser();
+      allow create, update, delete: if isApprovedUser() && request.auth.uid == uid;
     }
 
     match /{document=**} {

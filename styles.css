@@ -356,3 +356,57 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(62,1
 .player-trade-entry-note{margin-top:7px;padding:7px 8px;border-radius:8px;background:#edf5fb;font-size:11px;color:var(--muted)}
 .pick-tile.has-trade-history{padding-bottom:24px}
 .trade-detail-footer.history-only{background:#eee9fb;color:var(--purple)}
+
+/* v7.0 guest preview */
+.guest-login-divider{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin:14px 0 10px;
+  color:var(--muted);
+  font-size:12px;
+}
+.guest-login-divider::before,
+.guest-login-divider::after{
+  content:"";
+  flex:1;
+  height:1px;
+  background:var(--line);
+}
+.btn.guest{
+  background:#26334a;
+  color:#fff;
+  border:1px solid #465674;
+}
+.guest-readonly-chip{
+  display:inline-flex;
+  align-items:center;
+  margin-left:7px;
+  padding:3px 7px;
+  border-radius:999px;
+  background:#eee9fb;
+  color:var(--purple);
+  font-size:10px;
+  font-weight:800;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+}
+.guest-mode #openQueueButton,
+.guest-mode #queuePlayerButton,
+.guest-mode #draftPlayerButton,
+.guest-mode #playerModalActionArea,
+.guest-mode #presenceChip,
+.guest-mode .quick-queue-button,
+.guest-mode .quick-draft-button,
+.guest-mode [data-trade-tab="propose"],
+.guest-mode [data-trade-tab="received"],
+.guest-mode [data-trade-tab="sent"],
+.guest-mode #tradeOfferBadge{
+  display:none !important;
+}
+.guest-mode [data-trade-tab="history"]{
+  display:inline-flex !important;
+}
+.guest-mode .trade-actions{
+  display:none !important;
+}

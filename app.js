@@ -7,7 +7,7 @@ import {
   getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs,
   serverTimestamp, query, orderBy, onSnapshot, runTransaction, addDoc
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=691";
+import { firebaseConfig } from "./firebase-config.js?v=7000";
 
 const TEAM_ACCOUNTS = [
   { team:"YoByronWatkins", email:"byronwatkins@gmail.com", draftPosition:8 },
@@ -58,18 +58,25 @@ let presenceEntries=[];
 let unsubscribePresence=null;
 let presenceTimer=null;
 let currentView="Draft Board";
+let guestMode=false;
 
+function isGuest(){return guestMode||currentProfile?.role==="guest"}
 function normalizeEmail(v){return String(v||"").trim().toLowerCase()}
 function accountForEmail(email){return TEAM_ACCOUNTS.find(x=>x.email===normalizeEmail(email))}
 function accountForTeam(team){return TEAM_ACCOUNTS.find(x=>x.team===team)}
 function showOnly(id){screens.forEach(x=>$(x).classList.toggle("hidden",x!==id))}
 function setMessage(id,text="",type=""){const el=$(id);el.textContent=text;el.className=`message ${type}`.trim();el.classList.toggle("hidden",!text)}
 function actingTeam(){
+  if(isGuest())return null;
   if(currentProfile?.role==="commissioner"&&assumedTeam)return assumedTeam;
   return currentProfile?.team||null;
 }
 function refreshSignedInIdentity(){
   if(!$("signedInTeam")||!currentProfile)return;
+  if(isGuest()){
+    $("signedInTeam").innerHTML=`Guest <span class="guest-readonly-chip">Read only</span>`;
+    return;
+  }
   $("signedInTeam").innerHTML=`${safe(currentProfile.team)}${assumedTeam?`<span class="assumed-team-chip">Testing as ${safe(assumedTeam)}</span>`:""}`;
 }
 function toast(text){$("toast").textContent=text;$("toast").classList.add("show");setTimeout(()=>$("toast").classList.remove("show"),2200)}
@@ -158,11 +165,52 @@ $("forgotPassword").onclick=async()=>{
   try{await sendPasswordResetEmail(auth,email);setMessage("authMessage","Password-reset email sent.","success")}
   catch(error){setMessage("authMessage",friendlyError(error),"error")}
 };
-document.querySelectorAll("[data-signout]").forEach(b=>b.onclick=()=>signOut(auth));
+document.querySelectorAll("[data-signout]").forEach(b=>b.onclick=async()=>{
+  if(isGuest()){
+    guestMode=false;
+    currentProfile=null;
+    document.body.classList.remove("guest-mode");
+    cleanupDraftListener();
+    showOnly("authScreen");
+    document.querySelectorAll("[data-signout]").forEach(button=>button.textContent="Sign Out");
+    return;
+  }
+  await signOut(auth);
+});
 $("pendingRefresh").onclick=()=>loadCurrentUser(auth.currentUser,true);
 
+async function loadGuest(){
+  cleanupDraftListener();
+  guestMode=true;
+  assumedTeam=null;
+  currentProfile={
+    uid:null,
+    displayName:"Guest",
+    email:"Read-only preview",
+    team:"Guest",
+    role:"guest",
+    status:"approved"
+  };
+  document.body.classList.add("guest-mode");
+  $("signedInEmail").textContent="Read-only preview";
+  refreshSignedInIdentity();
+  $("commissionerToggle").classList.add("hidden");
+  $("commissionerRail").classList.add("hidden");
+  $("presenceChip").classList.add("hidden");
+  $("tradeOfferBadge").classList.add("hidden");
+  document.querySelectorAll("[data-signout]").forEach(button=>button.textContent="Exit Guest View");
+  showOnly("app");
+  renderBoard();
+  subscribeToDraft();
+  if(!players.length)await loadPlayers();
+  renderTradeCenter();
+  toast("Guest mode: read-only access");
+}
+
+$("continueAsGuest").onclick=()=>loadGuest();
+
 async function loadCurrentUser(user,manual=false){
-  if(!user){cleanupDraftListener();showOnly("authScreen");return}
+  if(!user){if(isGuest())return;cleanupDraftListener();showOnly("authScreen");return}
   try{
     const ref=doc(db,"users",user.uid),snap=await getDoc(ref);
     if(!snap.exists()){
@@ -174,7 +222,10 @@ async function loadCurrentUser(user,manual=false){
         status:commissioner?"approved":"pending",createdAt:serverTimestamp()});
       return loadCurrentUser(user);
     }
-    const profile=snap.data();currentProfile=profile;
+    const profile=snap.data();
+    guestMode=false;
+    document.body.classList.remove("guest-mode");
+    currentProfile=profile;
     if(profile.status==="pending"){$("pendingTeam").textContent=profile.requestedTeam||"—";showOnly("pendingScreen");if(manual)toast("Approval is still pending");return}
     if(profile.status==="rejected"){$("rejectedMessage").textContent=profile.rejectionReason||"Registration rejected.";showOnly("rejectedScreen");return}
     if(profile.status!=="approved"){showOnly("pendingScreen");return}
@@ -797,11 +848,13 @@ function renderPresence(){
   renderBoard();
 }
 async function updatePresence(view=currentView,online=true){
+  if(isGuest()||!auth.currentUser)return;
   if(!auth.currentUser||!currentProfile)return;
   currentView=view;
   try{await setDoc(doc(db,"presence",auth.currentUser.uid),{uid:auth.currentUser.uid,team:currentProfile.team,view,currentPick:liveDraftState?.currentPick??0,online,lastSeen:serverTimestamp()},{merge:true})}catch(error){console.warn("Presence update failed",error)}
 }
 function subscribeToQueueAndPresence(){
+  if(isGuest())return;
   if(unsubscribeQueue)unsubscribeQueue();
   if(unsubscribePresence)unsubscribePresence();
   if(presenceTimer)clearInterval(presenceTimer);
@@ -860,6 +913,7 @@ function updatePlayerDraftButton(){
   else{$("draftPlayerButton").textContent="Not Your Pick";$("draftPlayerHint").textContent=currentPickOwner()?`${currentPickOwner()} is on the clock.`:"The draft is not ready."}
 }
 async function saveDraftSelection(){
+  if(isGuest())return toast("Guest access is read only");
   const player=playerById(selectedPlayerId);if(!player)return;
   const editMode=currentProfile?.role==="commissioner"&&commissionerDraftMode?.type==="edit";
   const forceMode=currentProfile?.role==="commissioner"&&commissionerDraftMode?.type==="force";
@@ -897,6 +951,7 @@ function highestFantasyAvailablePlayer(){
     })[0]||null;
 }
 async function forceBestAvailablePick(){
+  if(isGuest())return toast("Guest access is read only");
   if(currentProfile?.role!=="commissioner")return;
   if(!liveDraftState?.initialized)return toast("Initialize the draft first");
   if(liveDraftState.currentPick>=TOTAL_PICKS)return toast("The draft is complete");
@@ -1016,6 +1071,24 @@ function renderOfferCard(trade,view){
 }
 function renderTradeCenter(){
   if(!$("tradePartnerSelect")||!currentProfile)return;
+  if(isGuest()){
+    document.querySelectorAll("[data-trade-tab]").forEach(button=>{
+      const history=button.dataset.tradeTab==="history";
+      button.classList.toggle("hidden",!history);
+      button.classList.toggle("active",history);
+    });
+    $("tradeProposePanel").classList.add("hidden");
+    $("tradeReceivedPanel").classList.add("hidden");
+    $("tradeSentPanel").classList.add("hidden");
+    $("tradeHistoryPanel").classList.remove("hidden");
+    $("tradeHistoryList").innerHTML=tradeHistory.length
+      ?tradeHistory.map(t=>renderOfferCard(t,"history")).join("")
+      :`<div class="empty-state">No completed trades yet.</div>`;
+    $("receivedTradeCount").textContent="0";
+    $("sentTradeCount").textContent="0";
+    $("tradeOfferBadge").classList.add("hidden");
+    return;
+  }
   const team=effectiveTradeTeam();
   if(!team)return;
   populateTradePartnerOptions();
@@ -1057,6 +1130,7 @@ $("closeTradeDetailModal").onclick=()=>$("tradeDetailModal").classList.add("hidd
 $("tradeDetailModal").onclick=event=>{if(event.target===$("tradeDetailModal"))$("tradeDetailModal").classList.add("hidden")};
 
 $("sendTradeOffer").onclick=async()=>{
+  if(isGuest())return toast("Guest access is read only");
   const fromTeam=effectiveTradeTeam(),toTeam=$("tradePartnerSelect").value;
   const fromPicks=selectedTradePicks("from"),toPicks=selectedTradePicks("to");
   const note=$("tradeNote").value.trim();
@@ -1069,6 +1143,7 @@ $("sendTradeOffer").onclick=async()=>{
   }catch(error){setMessage("tradeFormMessage",friendlyError(error),"error")}
 };
 async function changeTradeStatus(id,status){
+  if(isGuest())return toast("Guest access is read only");
   const trade=tradeOffers.find(item=>item.id===id),team=effectiveTradeTeam();
   if(!trade)return;
   try{
@@ -1077,6 +1152,7 @@ async function changeTradeStatus(id,status){
   }catch(error){toast(friendlyError(error))}
 }
 async function acceptTrade(id){
+  if(isGuest())return toast("Guest access is read only");
   const trade=tradeOffers.find(item=>item.id===id),team=effectiveTradeTeam();
   if(!trade||trade.status!=="pending"||trade.toTeam!==team)return;
   if(!confirm(`Accept trade with ${trade.fromTeam}?`))return;
@@ -1100,6 +1176,7 @@ async function acceptTrade(id){
   }catch(error){toast(error.message||"Trade could not be accepted")}
 }
 async function revertTrade(id){
+  if(isGuest())return toast("Guest access is read only");
   if(currentProfile?.role!=="commissioner")return;
   const trade=tradeOffers.find(item=>item.id===id);
   if(!trade||trade.status!=="accepted"||!confirm(`Revert trade between ${trade.fromTeam} and ${trade.toTeam}?`))return;
@@ -1187,5 +1264,22 @@ $("advancePick").textContent="Force Pick";$("previousPick").textContent="Undo La
 $("advancePick").onclick=forceBestAvailablePick;
 $("previousPick").onclick=undoLastPick;
 const editButton=document.createElement("button");editButton.id="editCompletedPick";editButton.className="btn";editButton.textContent="Edit Pick";editButton.onclick=editPick;$("resetDraftState").before(editButton);
+
+document.addEventListener("click",event=>{
+  if(!isGuest())return;
+  const blocked=event.target.closest(`
+    #queuePlayerButton,#draftPlayerButton,#openQueueButton,#clearQueueButton,
+    #sendTradeOffer,#initializeDraft,#pauseResumeDraft,#advancePick,#previousPick,
+    #resetDraftState,#editCompletedPick,#commissionerToggle,#commissionerRail,
+    [data-quick-queue],[data-quick-draft],[data-queue-draft],[data-queue-up],
+    [data-queue-down],[data-queue-remove],[data-accept-trade],
+    [data-decline-trade],[data-cancel-trade],[data-revert-trade]
+  `);
+  if(blocked){
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    toast("Guest access is read only");
+  }
+},true);
 
 onAuthStateChanged(auth,user=>user?loadCurrentUser(user):loadCurrentUser(null));
